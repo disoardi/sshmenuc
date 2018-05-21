@@ -157,6 +157,7 @@ def display_menu_tg(targets):
             args = [command] + target.get('options', []) + [target['host']]
             try:
                 # After this line, ssh will replace the python process
+                #os.execvp('sshfs', ['sshfs'] + target.get('options',[]) + [target['host'] + ':/root'] + [target['mount']])
                 os.execvp(command, args)
             except FileNotFoundError:
                 sys.exit('command not found: {commandname}'.format(commandname=command))
