@@ -1,10 +1,11 @@
 import argparse
 import json
 import os
+import re
+
 import readchar
 import sys
 import time
-import readline
 
 from subprocess import call, Popen, PIPE
 from clint import resources
@@ -140,8 +141,11 @@ def display_menu(targets):
             # Determine the longest host
             longest_host = -1
             longest_line = -1
+            longest_user = 5
+            longest_note = 5
 
             for index, target in enumerate(targets):
+
                 # Host to connect
                 if 'host' in target:
                     length = len(list(target['host']))
@@ -149,43 +153,62 @@ def display_menu(targets):
                     if length > longest_host:
                         longest_host = length
 
+                if 'options' in target:
+                    length_opt = len(re.sub('(-l)', 'User: ', re.sub('(\[|]|\')', ' ', str(target['options'])).split(',')[0]))
+                    # Check host length
+                    if length_opt > longest_user:
+                        longest_user = length_opt
                 else:
                     length = len(list(target.keys())[0])
                     # Check host length
                     if length > longest_host:
                         longest_host = length
 
+                if longest_note > longest_user:
+                    longest_user = longest_note
+                else:
+                    longest_note = longest_user
+
             if 'host' in target:
                 # Header
-                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_host + "-+"))
-                puts(colored.yellow('|    ' + "ID " + ' | ' + u'Host'.ljust(longest_host) + ' | ' + u'Note'.ljust(longest_host) + ' |'))
-                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_host + "-+"))
+                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
+                puts(colored.yellow('| ' + "ID    " + ' | ' + u'Host'.ljust(longest_host) + ' | ' + u'User'.ljust(longest_user) + ' |'))
+                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
             else:
                 # Header
-                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_host + "-+"))
-                puts(colored.yellow('|    ' + "ID " + ' | ' + u'Group'.ljust(longest_host) + ' | ' + u'Note'.ljust(longest_host) + ' |'))
-                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_host + "-+"))
-
+                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
+                puts(colored.yellow('| ' + "ID    " + ' | ' + u'Group'.ljust(longest_host) + ' | ' + u'Note'.ljust(longest_note) + ' |'))
+                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
 
             for index, target in enumerate(targets):
 
                 # Host to connect
                 if 'host' in target:
-                    desc = '%2d ' % index + '  | ' + target['host'].ljust(longest_host)
+                    if 'options' in target:
+                        user = re.sub('(-l)', 'User: ', re.sub('(\[|]|\')', '', str(target['options'])).split(',')[0])
 
-                    if index == selected_target:
-                        puts(colored.green(' -> ' + desc))
                     else:
-                        puts('    ' + desc)
+                        user = ''
+                    if index == selected_target:
+                        puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(target['host'].ljust(longest_host)) + colored.yellow(' |') + colored.green(user.ljust(longest_user)) + colored.yellow('  |'))
+                    else:
+                        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + target['host'].ljust(longest_host) + colored.yellow(' |') + user.ljust(longest_user) + colored.yellow('  |'))
 
                 # Group of hosts
                 else:
-                    desc = '%2d ' % index + ' | ' + list(target.keys())[0].ljust(longest_host)
 
                     if index == selected_target:
-                        puts(colored.green(' -> ' + desc))
+                        if list(target.keys())[0] == 'note':
+                            puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(list(target.keys())[0].ljust(longest_host)) + colored.yellow(' |') + target['note'].ljust(longest_note) + colored.yellow('  |'))
+                        else:
+                            puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(list(target.keys())[0].ljust(longest_host)) + colored.yellow(' |') + ''.ljust(longest_note) + colored.yellow('  |'))
                     else:
-                        puts('    ' + desc)
+                        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + list(target.keys())[0].ljust(longest_host) + colored.yellow(' |') + ''.ljust(longest_note) + colored.yellow('  |'))
+            if 'host' in target:
+                if 'options' in target:
+                    puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
+            else:
+                puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
 
         # Hang until we get a keypress
         key = readchar.readkey()
@@ -235,9 +258,9 @@ def display_menu(targets):
             # For cleanliness clear the screen
             call(['tput', 'clear'])
 
+            target = targets[selected_target]
             # Host to connect
             if 'host' in target:
-                target = targets[selected_target]
 
                 # Check if there is a custom command for this target
                 if 'command' in target.keys():
@@ -256,7 +279,6 @@ def display_menu(targets):
 
             # Group of hosts
             else:
-                target = targets[selected_target]
                 display_menu(target[list(target.keys())[0]])
 
         elif key == 'h':

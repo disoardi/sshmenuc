@@ -4,21 +4,14 @@ sshmenu
 
 This tool works by using Python's ``os.execvp(...)``, which will replace the current process (python) with ``ssh``.
 
-.. image:: http://i.imgur.com/X1jaoci.gif
+This is a fork from mmeyer724/sshmenu code with integration of selboo/sshmenu push.
 
+I have add support to create more than one config level for organize in groups of host
 
 Quick Setup
 -----------
-Tested working on OS X El Capitan (10.11.5) and Ubuntu Trusty Tahr (14.04), Xenial Xerus (16.04)
+Tested working on Fedora with Python 3.7
 
-
-**OS X**
-
-.. code-block:: bash
-
-   brew install https://raw.githubusercontent.com/Mike724/sshmenu/master/sshmenu.rb
-   sshmenu
-   
 **Linux**
 
 .. code-block:: bash
@@ -35,21 +28,21 @@ Tested working on OS X El Capitan (10.11.5) and Ubuntu Trusty Tahr (14.04), Xeni
    pip3 install -r requirements.txt
    python3 -m sshmenu
 
-Configuration
--------------
-On first run an example configuration file will be created for you, along with the path. For reference, I've added this information here as well.
+For run this versione on your systems overvrite the original sshmenu.py with this file.
 
-**OS X**
-
+In my installation:
 .. code-block:: bash
 
-   nano ~/Library/Application\ Support/sshmenu/config.json
-   
+    cp /home/isoardi/Progetti/sshmenu/sshmenu/sshmenu.py /usr/local/lib/python3.7/site-packages/sshmenu/
+
+Configuration
+-------------
+
 **Linux**
 
 .. code-block:: bash
 
-   nano ~/.config/sshmenu/config.json
+   vim ~/.config/sshmenu/config.json
 
 **Default contents**
 
@@ -90,4 +83,5 @@ You can specify additional command line options (see `man ssh`) as follows:
 
 Todo
 ----
-* Automatically ask to place your ``~/.ssh/id_rsa.pub`` into the remote host's ``~/.ssh/authorized_keys``
+* Add support to edit, delete and add new groups/hosts
+* Return on previous menu level
