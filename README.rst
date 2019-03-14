@@ -81,7 +81,7 @@ You can specify additional command line options (see `man ssh`) as follows:
         ]
     }
 
-Todo
+ToDo
 ----
 * Add support to edit, delete and add new groups/hosts
 * Return on previous menu level
