@@ -24,6 +24,8 @@ TRANSITION_DELAY_TIME = 0.5
 
 NUMBER_ENTRY_EXPIRE_TIME = 0.75
 
+VERSION = 'dev_0.0.4'
+
 
 def main():
     global config_name
