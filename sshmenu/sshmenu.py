@@ -41,8 +41,11 @@ def main():
     parser.add_argument('-c', '--configname', default='config', help='Specify an alternate configuration name.')
     args = parser.parse_args()
 
-    # Get config name
-    config_name = '{configname}.json'.format(configname=args.configname)
+    # Get config name (fix issue - 1)
+    if (os.path.splitext(args.configname)[1] == '.json'):
+        config_name = '{configname}'.format(configname=args.configname)
+    else:
+        config_name = '{configname}.json'.format(configname=args.configname)
 
     # First parameter is 'company' name, hence duplicate arguments
     resources.init('sshmenu', 'sshmenu')
@@ -331,6 +334,7 @@ def display_menu(targets):
             # Empty the number buffer
             number_buffer = []
 
+# ToDo - Controllo se al primo livello allora exit(0); altrimenti se nel primo livello c'è direttamente un host non riesco ad uscire se non con Ctrl + C
         elif key == 'q':
             if 'host' in target:
                 # Go to main menu
