@@ -8,6 +8,8 @@ from subprocess import call
 from clint import resources
 from clint.textui import puts, colored
 
+#TODO add integration tu gcp cli for gcloud compute ssh command
+
 
 def main():
     # First parameter is 'company' name, hence duplicate arguments
