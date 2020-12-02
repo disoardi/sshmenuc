@@ -1,0 +1,17 @@
+{
+    "targets": [
+        {
+            "test_0.0.4": [
+            {
+                "friendly": "coordinator01",
+                "host": "coordinator01",
+                "connection_type": "gssh",
+                "command": "docker",
+                "zone": "cloud_zone",
+                "project": "project_name"
+            }
+            ]
+        }
+    ]
+}
+

@@ -117,3 +117,8 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+sshmenu/__pycache__
+sshmenu/bin
+sshmenu/lib
+sshmenu/lib64
+sshmenu/pyvenv.cfg

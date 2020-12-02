@@ -12,7 +12,7 @@ Features to add
 - [ ] add new host
 - [ ] delete host
 - [ ] open multiplessh connection
-- [ ] use GCP CLI to connect to google cloude istance
+- [X] use GCP CLI to connect to google cloude istance
 
 ## Authors
 
