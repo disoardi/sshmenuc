@@ -154,6 +154,7 @@ def print_header(pos, longest_host, longest_user, longest_note):
         puts(colored.yellow('| ' + "ID    " + ' | ' + u'Group'.ljust(longest_host) + ' | ' + u'Note'.ljust(longest_note) + ' |'))
         puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
 
+<<<<<<< HEAD
 def print_host(index, selected_target, target, longest_host, longest_user):
     user = extract_user(target)
     if index == selected_target:
@@ -178,6 +179,14 @@ def print_footer(target, longest_host, longest_user, longest_note):
         puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
     else:
         puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
+=======
+        elif key == 'q':
+            config = json.loads(resources.user.read('config.json'))
+            display_menu_g(config['targets'])
+
+        elif key == readchar.key.CTRL_C:
+            exit(0)
+>>>>>>> 82403924bfb210f15ce71e46511efa341a99a770
 
 def extract_user(target):
     if 'options' in target:
