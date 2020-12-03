@@ -22,6 +22,8 @@ Davide Isoardi abacus@linux.it or business mail davide.isoardi@valuepartners.com
 
 ## Version History
 
+* 0.0.04
+    * add support for GCP ssh connection via google-sdk on docker
 * 0.1
     * create annidate menu
 
