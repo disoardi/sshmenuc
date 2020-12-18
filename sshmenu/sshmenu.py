@@ -178,6 +178,13 @@ def print_footer(target, longest_host, longest_user, longest_note):
         puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
     else:
         puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
+        # comment for merge, but is a 
+        # elif key == 'q':
+        #     config = json.loads(resources.user.read('config.json'))
+        #     display_menu_g(config['targets'])
+
+        # elif key == readchar.key.CTRL_C:
+        #     exit(0)
 
 def extract_user(target):
     if 'options' in target:

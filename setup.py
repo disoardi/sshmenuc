@@ -4,15 +4,15 @@ with open('requirements.txt') as requirements_file:
     required = requirements_file.read().splitlines()
 
 setup(
-    name='sshmenu',
-    version='0.0.3',
+    name='sshmenuC',
+    version='0.0.4',
     license='MIT',
-    description='Command line SSH menu and helper utility',
-    long_description=open('README.rst').read(),
-    author='Michael Meyer',
-    author_email='michael@meyer.io',
-    url='https://github.com/Mike724/sshmenu',
-    packages=['sshmenu'],
+    description='Command line SSH menu and helper utility with cluster support',
+    long_description=open('README.md').read(),
+    author='Davide Isoardi',
+    author_email='davide@isoardi.info',
+    url='https://github.com/disoardi/sshmenu',
+    packages=['sshmenuc'],
     install_requires=required,
     classifiers=[
         'Environment :: Console',
@@ -22,6 +22,6 @@ setup(
         'Programming Language :: Python :: 3'
     ],
     entry_points={
-        'console_scripts': ['sshmenu=sshmenu.sshmenu:main']
+        'console_scripts': ['sshmenuc=sshmenu.sshmenu:main']
     }
 )
