@@ -125,3 +125,5 @@ sshmenu/lib64
 sshmenu/pyvenv.cfg
 sshmenu/json_test.py
 .gitignore
+sshmenuC.egg-info
+.vscode
