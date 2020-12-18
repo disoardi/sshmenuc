@@ -7,7 +7,7 @@ with open('requirements.txt') as requirements_file:
     required = requirements_file.read().splitlines()
 
 setup(
-    name='sshmenuC',
+    name='sshmenuc',
     version='0.0.4',
     license='MIT',
     description='Command line SSH menu and helper utility with cluster support',
