@@ -26,6 +26,6 @@ setup(
         'Programming Language :: Python :: 3'
     ],
     entry_points={
-        'console_scripts': ['sshmenuc=sshmenu.sshmenu:main']
+        'console_scripts': ['sshmenuc=sshmenuc.sshmenuc:main']
     }
 )
