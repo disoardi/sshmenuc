@@ -127,3 +127,8 @@ sshmenu/json_test.py
 .gitignore
 sshmenuC.egg-info
 .vscode
+sshmenuc/bin
+sshmenuc/lib
+sshmenuc/lib64
+sshmenuc/json_test.json
+sshmenuc/json_test.py
