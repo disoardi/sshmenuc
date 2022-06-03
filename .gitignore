@@ -132,3 +132,8 @@ sshmenuc/lib
 sshmenuc/lib64
 sshmenuc/json_test.json
 sshmenuc/json_test.py
+/.vscode
+/sshmenuc/bin
+sshmenuc/bin/python3
+sshmenuc/bin/python
+sshmenuc/bin/python3.9

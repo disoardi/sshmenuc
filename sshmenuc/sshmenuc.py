@@ -228,7 +228,7 @@ def display_menu(targets):
             puts(colored.cyan('Select a target (press "h" for help)'))
 
             # Determine the longest host
-            longest_host = -1
+            longest_host = 5
             longest_line = -1
             longest_user = 5
             longest_note = 5
