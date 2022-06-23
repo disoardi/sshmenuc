@@ -3,6 +3,7 @@ import json
 import os
 import re
 from typing import List, Any
+from wsgiref.simple_server import WSGIRequestHandler
 
 import readchar
 import sys
@@ -96,8 +97,13 @@ def connection_create(target):
 
     # Append the new target to the config
     config = json.loads(resources.user.read(config_name))
-    config[target].append({'command': command, 'host': host, 'friendly': friendly, 'options': options})
-
+    print(config['targets'])
+    print(config['targets'].index('Casa'))
+ #   for index, tg in enumerate(config['targets']):
+ #       print(index, tg.keys())
+    config['targets'][0].append({'command': command, 'host': host, 'friendly': friendly, 'options': options})
+    print(config['targets'])
+  
     # Save the new config
     resources.user.write(config_test, json.dumps(config, indent=4))
     update_targets()
@@ -155,9 +161,9 @@ def print_header(pos, longest_host, longest_user, longest_note):
 def print_host(index, selected_target, target, longest_host, longest_user):
     user = extract_user(target)
     if index == selected_target:
-        puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(target['host'].ljust(longest_host)) + colored.yellow(' |') + colored.green(user.ljust(longest_user)) + colored.yellow('  |'))
+        puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(target['friendly'].ljust(longest_host)) + colored.yellow(' |') + colored.green(user.ljust(longest_user)) + colored.yellow('  |'))
     else:
-        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + target['host'].ljust(longest_host) + colored.yellow(' |') + user.ljust(longest_user) + colored.yellow('  |'))
+        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + target['friendly'].ljust(longest_host) + colored.yellow(' |') + user.ljust(longest_user) + colored.yellow('  |'))
 
 def print_grp (index, selected_target, target, longest_host, longest_note):
     if index == selected_target:
@@ -216,7 +222,7 @@ def display_menu(targets):
 
     while True:
         # Return to the saved cursor position
-        call(['tput', 'clear', 'rc'])
+        call(['tput', 'clear'])
 
         # We need at least one target for our UI to make sense
         num_targets = len(targets)
@@ -242,7 +248,7 @@ def display_menu(targets):
                     if length > longest_host:
                         longest_host = length
 
-                if 'options' in target:
+                if 'options' in target: #TODO: WTF?!
                     length_opt = len(extract_user(target))
                     # Check host length
                     if length_opt > longest_user:
