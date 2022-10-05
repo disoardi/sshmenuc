@@ -7,6 +7,7 @@ sshmenu fork for cluster managemnt
 git clone https://github.com/disoardi/sshmenuc.git
 cd sshmenuc
 python3 -m build
+pip install -e .
 ```
 
 
