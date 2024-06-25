@@ -1,0 +1,18 @@
+[build-system]
+requires = [ "poetry-core",]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "Sshmenuc"
+version = "0.0.4"
+description = ""
+authors = [ "Davide Isoardi <davide.isoardi@dxc.com>",]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9"
+args = "^0.1.0"
+clint = "^0.5.1"
+readchar = "^0.7"
+docker = "^7.1.0"
