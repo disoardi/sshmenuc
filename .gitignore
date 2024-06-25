@@ -137,3 +137,4 @@ sshmenuc/json_test.py
 sshmenuc/bin/python3
 sshmenuc/bin/python
 sshmenuc/bin/python3.9
+poetry.lock
