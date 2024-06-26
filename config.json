@@ -1,29 +1,86 @@
 {
-    "targets": [
+    "personal": [
         {
-            "test1_0.0.4": [
-            {
-                "friendly": "coordinator01",
-                "host": "coordinator01",
-                "connection_type": "gssh",
-                "command": "docker",
-                "zone": "cloud_zone",
-                "project": "project_name"
-            }
+            "prod": [
+                {
+                    "friendly": "coordinator01",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "command": "docker",
+                    "zone": "cloud_zone",
+                    "project": "project_name"
+                }, 
+                {
+                  "friendly": "coordinator02",
+                  "host": "coordinator02",
+                  "connection_type": "ssh",
+                  "command": "ssh",
+                  "zone": "on_prem",
+                  "project": "project_name"
+              }
             ]
         },
         {
-            "test2_0.0.4": [
-            {
-                "friendly": "coordinator02",
-                "host": "coordinator02",
-                "connection_type": "gssh",
-                "command": "docker",
-                "zone": "cloud_zone",
-                "project": "project_name"
-            }
+            "dev": [
+                {
+                    "friendly": "master01",
+                    "host": "master01",
+                    "connection_type": "ssh",
+                    "command": "ssh",
+                    "zone": "cloud_zone",
+                    "project": "newprj"
+                }
+            ]
+        }
+    ],
+    "work": [
+        {
+            "first": [
+                {
+                    "friendly": "first",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "command": "docker",
+                    "zone": "cloud_zone",
+                    "project": "project_name"
+                }
+            ]
+        },
+        {
+            "second.0.4": [
+                {
+                    "friendly": "second",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "command": "docker",
+                    "zone": "cloud_zone",
+                    "project": "project_name"
+                }
+            ]
+        },
+        {
+            "third.0.4": [
+                {
+                    "friendly": "third",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "command": "docker",
+                    "zone": "cloud_zone",
+                    "project": "project_name"
+                }
+            ]
+        },
+        {
+            "four.0.4": [
+                {
+                    "friendly": "four",
+                    "host": "coordinator02",
+                    "connection_type": "gssh",
+                    "command": "docker",
+                    "zone": "cloud_zone",
+                    "project": "project_name"
+                }
             ]
         }
     ]
 }
-
