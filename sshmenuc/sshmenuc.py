@@ -2,11 +2,10 @@ import argparse
 import json
 import os
 import re
-from typing import List, Any
-from wsgiref.simple_server import WSGIRequestHandler
+from typing import List, Any, Dict
 
 import readchar
-import sys
+import sys, logging
 import time
 
 from subprocess import call, Popen, PIPE
@@ -15,404 +14,297 @@ from clint.textui import puts, colored
 
 import docker
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+class ConnectionManager:
+    def __init__(self, config_file: str = None):
+        self.config_file = config_file
+        self.config_data: Dict[str, Any] = {"targets": []}
+
+        if config_file:
+            self.load_config()
+
+    def load_config(self):
+        try:
+            with open(self.config_file, 'r') as file:
+                self.config_data = json.load(file)
+        except FileNotFoundError:
+            print(f"Config file '{self.config_file}' not found. Creating a new one.")
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON in '{self.config_file}'. Creating a new one.")
+
+    def save_config(self):
+        with open(self.config_file, 'w') as file:
+            json.dump(self.config_data, file, indent=4)
+
+    def get_config(self) -> Dict[str, Any]:
+        return self.config_data
+
+    def set_config(self, config_data: Dict[str, Any]):
+        self.config_data = config_data
+
+    def create_target(self, target_name: str, connections: List[Dict[str, Any]]):
+        target = {target_name: connections}
+        self.config_data["targets"].append(target)
+
+    def modify_target(self, target_name: str, new_target_name: str = None, connections: List[Dict[str, Any]] = None):
+        for target in self.config_data["targets"]:
+            if list(target.keys())[0] == target_name:
+                if new_target_name:
+                    target = {new_target_name: target[target_name]}
+                if connections:
+                    target[list(target.keys())[0]] = connections
+                break
+
+    def delete_target(self, target_name: str):
+        for target in self.config_data["targets"]:
+            if list(target.keys())[0] == target_name:
+                self.config_data["targets"].remove(target)
+                break
+
+    def create_connection(self, target_name: str, friendly: str, host: str, connection_type: str = "ssh", command: str = "ssh", zone: str = "", project: str = ""):
+        connection = {
+            "friendly": friendly,
+            "host": host,
+            "connection_type": connection_type,
+            "command": command,
+            "zone": zone,
+            "project": project
+        }
+        for target in self.config_data["targets"]:
+            if list(target.keys())[0] == target_name:
+                target[target_name].append(connection)
+                break
+
+    def modify_connection(self, target_name: str, connection_index: int, friendly: str = None, host: str = None, connection_type: str = None, command: str = None, zone: str = None, project: str = None):
+        for target in self.config_data["targets"]:
+            if list(target.keys())[0] == target_name:
+                connection = target[target_name][connection_index]
+                if friendly:
+                    connection["friendly"] = friendly
+                if host:
+                    connection["host"] = host
+                if connection_type:
+                    connection["connection_type"] = connection_type
+                if command:
+                    connection["command"] = command
+                if zone:
+                    connection["zone"] = zone
+                if project:
+                    connection["project"] = project
+                break
+
+    def delete_connection(self, target_name: str, connection_index: int):
+        for target in self.config_data["targets"]:
+            if list(target.keys())[0] == target_name:
+                target[target_name].pop(connection_index)
+                break
+
+class ConnectionNavigator:
+    global selected_target
+    def __init__(self, config_file: str):
+        self.config_file = config_file
+        self.config_data: Dict[str, Any]
+        self.load_config()
+
+    def load_config(self):
+        try:
+            with open(self.config_file, 'r') as file:
+                self.config_data = json.load(file)
+                logging.debug("Load config file %s", self.config_data)
+        except FileNotFoundError:
+            logging.error(f"Config file '{self.config_file}' not found.")
+        except json.JSONDecodeError:
+            logging.critical(f"Error decoding JSON in '{self.config_file}'.")
+
+    def navigate(self):
+        current_path = []
+        # Keep track of currently selected target
+        selected_target = 0
+        while True:
+            num_targets = self.count_elements(current_path)
+            self.print_menu(selected_target, current_path)
+            key = readchar.readkey()
+
+            if key == 'q':
+                break
+            elif key == readchar.key.DOWN:
+                # Ensure the new selection would be valid
+                if ((selected_target) < (num_targets - 1)) or num_targets == 0:
+                    selected_target += 1
+            elif key == readchar.key.UP:
+                # Ensure the new selection would be valid
+                if (selected_target - 1) >= 0:
+                    selected_target -= 1
+            # elif key == '\x1b[C':  # Right arrow
+            #     self.move_right(current_path)
+            elif key == readchar.key.LEFT:  # Left arrow
+                self.move_left(current_path)
+            # elif key == 'c':
+            #     self.create_connection(current_path)
+            # elif key == 'm':
+            #     self.modify_connection(current_path)
+            # elif key == 'd':
+            #     self.delete_connection(current_path)
+            elif key == readchar.key.ENTER:
+                current_path.append(selected_target)
+                selected_target = 0
 
 
+    def print_menu(self, selected_target, current_path: List[Any]):
 
-father: List[Any] = []
-pv_targets = []
-config_name = ''
+        clear_screen = lambda:  os.system('cls') if os.name == 'nt'  else os.system('clear')
+        lambda x: True if x % 2 == 0 else False
+        clear_screen()
+        logging.debug("selected_target: %d", selected_target)
+        logging.debug("current_path: %s", current_path)
+        current_node = self.get_node(current_path)
+        if isinstance(current_node, dict):
+            self.print_table(current_node, selected_target, level=len(current_path))
+        elif isinstance(current_node, list):
+            self.print_table(current_node, selected_target, level=len(current_path)+1)
+            # for i, item in enumerate(current_node, start=1):
+            #     if isinstance(item, dict):
+            #         logging.debug("item is a dict 1")
+            #         self.print_table(item, selected_target, level=len(current_path)+1)
+            #     else:
+            #         print(f"{i}. {item}")
 
-# Time to sleep between transitions
-TRANSITION_DELAY_TIME = 0.5
+    def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
+        tbl = "+--------+-----------------------------------+"
+        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+        row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'#':>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'Description':^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+        print(row)
+        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
 
-NUMBER_ENTRY_EXPIRE_TIME = 0.75
+        if isinstance(data, dict):
+            keys = list(data.keys())
+            for key in keys:
+              if (keys.index(key) == selected_target):
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{keys.index(key):>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+              else:
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {keys.index(key):>6} {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+              print(row)
+        elif isinstance(data, list):
+            for i, item in enumerate(data):#, start=1):
+              t = i
+              key = list(item.keys())[0]
+              if (t == selected_target):
+                row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+              else:
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+              print(row)
 
+    def get_node(self, path: List[Any]):
+        node: Union[dict, list] = self.config_data
+        for item in path:
+            if isinstance(node, dict):
+                keys = list(node.keys())
+                if 0 <= item < len(keys):
+                    key = keys[item]
+                    if key in node:
+                        node = node[key]
+                    else:
+                        raise KeyError(f"Key '{key}' not found in dictionary.")
+            elif isinstance(node, list):
+                if item < len(node):
+                    node = node[item]
+            else:
+                raise TypeError(f"Unsupported type: {type(node)}")
+        return node
+
+    def count_elements(self, current_path: List[Any]) -> int:
+        node = self.get_node(current_path)
+        if isinstance(node, dict):
+            return len(node)
+        elif isinstance(node, list):
+            count = 0
+            for item in node:
+                if isinstance(item, dict):
+                    count += 1
+            return count
+        else:
+            return 0
+
+    def move_left(self, current_path: List[Any]):
+        if current_path:
+            if isinstance(self.get_node(current_path), dict):
+                current_path.pop()
+            elif len(current_path) == 1:
+              current_path.clear()
+            elif current_path[-1] == 0:
+                current_path.pop()
+            else:
+                current_path[-1] -= 1
+
+    def create_connection(self, current_path: List[Any]):
+        # Implement the logic to create a new connection
+        pass
+
+    def modify_connection(self, current_path: List[Any]):
+        # Implement the logic to modify an existing connection
+        pass
+
+    def delete_connection(self, current_path: List[Any]):
+        # Implement the logic to delete an existing connection
+        pass
 
 def main():
-    global config_name
-    global pv_targets
-    global father
-
-    # Check arguments
-    parser = argparse.ArgumentParser(prog='sshmenuc',
-                                     description='A convenient tool for bookmarking '
-                                                 'hosts and connecting to them via ssh.')
-    parser.add_argument('-c', '--configname', default='config', help='Specify an alternate configuration name.')
+    parser = argparse.ArgumentParser(description="SSH Connection Manager")
+    parser.add_argument("-c", "--config", help="Path to the config file", default="config.json")
+    parser.add_argument("-l", "--loglevel", help="Severity of log level: debug, info (default), warning, error and critical", default="default")
     args = parser.parse_args()
+    print(args)
+    if (args.loglevel == "debug"):
+        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    elif (args.loglevel == "info"):
+        logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
+    elif (args.loglevel == "warning"):
+        logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
+    elif (args.loglevel == "error"):
+        logging.basicConfig(stream=sys.stderr, level=logging.ERROR)
+    elif (args.loglevel == "critical"):
+        logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
+
+    navigator = ConnectionNavigator(args.config)
+    navigator.navigate()
+
+# # Create a new config file
+# config = ConnectionManager("config.json")
+# config.create_target("test1_0.0.4", [{"friendly": "coordinator01", "host": "coordinator01", "connection_type": "gssh", "command": "docker", "zone": "cloud_zone", "project": "project_name"}])
+# config.create_target("test2_0.0.4", [{"friendly": "coordinator02", "host": "coordinator02", "connection_type": "gssh", "command": "docker", "zone": "cloud_zone", "project": "project_name"}])
+# config.save_config()
+
+# # Load an existing config file
+# config = ConnectionManager("config.json")
+# print(config.get_config())
+
+# # Modify a target
+# config.modify_target("test1_0.0.4", new_target_name="new_target_name")
+# config.save_config()
+
+# # Delete a target
+# config.delete_target("test2_0.0.4")
+# config.save_config()
+
+# # Create a new connection
+# config.create_connection("new_target_name", "new_connection", "new_host")
+# config.save_config()
+
+# # Modify a connection
+# config.modify_connection("new_target_name", 0, friendly="modified_connection")
+# config.save_config()
+
+# Delete a connection
+#config.delete_connection("new_target_name", 0)
+#config.save_config()
 
-    # Get config name
-    config_name = '{configname}.json'.format(configname=args.configname)
-
-    # First parameter is 'company' name, hence duplicate arguments
-    resources.init('sshmenuc', 'sshmenuc')
-
-    # For the first run, create an example config
-    if resources.user.read(config_name) is None:
-        example_config = {
-            'targets': [
-                {
-                    'host': 'user@example-machine.local',
-                    'friendly': 'This is an example target',
-                    'options': []
-                },
-                {
-                    'command': 'mosh',
-                    'host': 'user@example-machine.local',
-                    'friendly': 'This is an example target using mosh',
-                    'options': []
-                }
-            ]
-        }
-        resources.user.write(config_name, json.dumps(example_config, indent=4))
-
-    update_targets()
-    list.append(father, pv_targets)
-    display_menu(pv_targets)
-
-def connection_create(target):
-    #TODO: testing
-    global config_name
-    conf_test = config_name + 'new'
-
-
-    call(['clear'])
-    puts(colored.cyan('Create new connection entry'))
-    puts('')
-
-    host = input('Hostname (user@machine): ')
-
-    if host is '':
-        puts('')
-        puts('Nothing done')
-        time.sleep(TRANSITION_DELAY_TIME)
-        return
-
-    friendly = input('Description []: ')
-    command = input('Command [ssh]: ')
-    options = input('Command Options []: ')
-
-    # Set the defaults if our input was empty
-    command = 'ssh' if command == '' else command
-    options = [] if options == '' else options.split()
-
-    # Append the new target to the config
-    config = json.loads(resources.user.read(config_name))
-    print(config['targets'])
-    print(config['targets'].index('Casa'))
- #   for index, tg in enumerate(config['targets']):
- #       print(index, tg.keys())
-    config['targets'][0].append({'command': command, 'host': host, 'friendly': friendly, 'options': options})
-    print(config['targets'])
-  
-    # Save the new config
-    resources.user.write(config_test, json.dumps(config, indent=4))
-    update_targets()
-
-    puts('')
-    puts('New connection added')
-    time.sleep(TRANSITION_DELAY_TIME)
-
-def split_horiz(self, terminal, cwd=None, sibling=None):
-    container = self.get_terminal_container(terminal)
-    return(container.split_axis(terminal, True, cwd, sibling))
-
-def update_targets():
-    global pv_targets, config_name
-
-    config = json.loads(resources.user.read(config_name))
-    if 'targets' in config:
-        pv_targets = config['targets']
-
-def get_terminal_height():
-    # Return height of terminal as int
-    tput = Popen(['tput', 'lines'], stdout=PIPE)
-    height, stderr = tput.communicate()
-
-    return int(height)
-
-def display_help():
-    # Clear screen and show the help text
-    call(['clear'])
-    puts(colored.cyan('Available commands (press any key to exit)'))
-
-    puts(' enter       - Connect to your selection')
-    puts(' crtl+c | q  - Quit sshmenu')
-    puts(' k (up)      - Move your selection up')
-    puts(' j (down)    - Move your selection down')
-    puts(' h           - Show help menu')
-    puts(' c           - Create new connection')
-    puts(' d           - Delete connection')
-    puts(' e           - Edit connection')
-    puts(' u           - Return to previus menu')
-
-    # Hang until we get a keypress
-    readchar.readkey()
-
-def print_header(pos, longest_host, longest_user, longest_note):
-    if pos == 'host':
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
-        puts(colored.yellow('| ' + "ID    " + ' | ' + u'Host'.ljust(longest_host) + ' | ' + u'User'.ljust(longest_user) + ' |'))
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
-    elif pos == 'grp':
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
-        puts(colored.yellow('| ' + "ID    " + ' | ' + u'Group'.ljust(longest_host) + ' | ' + u'Note'.ljust(longest_note) + ' |'))
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
-
-def print_host(index, selected_target, target, longest_host, longest_user):
-    user = extract_user(target)
-    if index == selected_target:
-        puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(target['friendly'].ljust(longest_host)) + colored.yellow(' |') + colored.green(user.ljust(longest_user)) + colored.yellow('  |'))
-    else:
-        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + target['friendly'].ljust(longest_host) + colored.yellow(' |') + user.ljust(longest_user) + colored.yellow('  |'))
-
-def print_grp (index, selected_target, target, longest_host, longest_note):
-    if index == selected_target:
-        if list(target.keys())[0] == 'note':
-            puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(list(target.keys())[0].ljust(longest_host)) + colored.yellow(' |') + target['note'].ljust(longest_note) + colored.yellow('  |'))
-        else:
-            puts(colored.yellow('|') + colored.green('-> ') + colored.green('%2d ' % index) + colored.yellow('  | ') + colored.green(list(target.keys())[0].ljust(longest_host)) + colored.yellow(' |') + ''.ljust(longest_note) + colored.yellow('  |'))
-    else:
-        puts(colored.yellow('|   ') + '%2d ' % index + colored.yellow('  | ') + list(target.keys())[0].ljust(longest_host) + colored.yellow(' |') + ''.ljust(longest_note) + colored.yellow('  |'))
-
-def print_footer(target, longest_host, longest_user, longest_note):
-    if 'host' in target:
-        #if 'options' in target:
-        #    puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
-        #else:
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_user + "-+"))
-    else:
-        puts(colored.yellow("+--------+-" + "-" * longest_host + "-+-" + "-" * longest_note + "-+"))
-        # comment for merge, but is a 
-        # elif key == 'q':
-        #     config = json.loads(resources.user.read('config.json'))
-        #     display_menu_g(config['targets'])
-
-        # elif key == readchar.key.CTRL_C:
-        #     exit(0)
-
-def extract_user(target):
-    if 'options' in target:
-        return re.sub('(-l)', 'User: ', re.sub('(\[|]|\')', '', str(target['options'])).split(',')[0])
-    return ''
-
-def display_menu(targets):
-    global config_name
-    global father
-    # Save current cursor position so we can overwrite on list updates
-    call(['tput', 'sc'])
-
-    # Keep track of currently selected target
-    selected_target = 0
-
-    # Support input of long numbers
-    number_buffer = []
-
-    # Store time of last number that was entered
-    time_last_digit_pressed = round(time.time())
-
-    # Get initial terminal height
-    terminal_height = get_terminal_height()
-
-    # Set initial visible target range.
-    # Subtract 2 because one line is used by the instructions,
-    # and one line is always empty at the bottom.
-    visible_target_range = range(terminal_height - 2)
-
-    number_last = round(time.time())
-
-    while True:
-        # Return to the saved cursor position
-        call(['tput', 'clear'])
-
-        # We need at least one target for our UI to make sense
-        num_targets = len(targets)
-        if num_targets <= 0: #TODO nevere num_targets==0 beacuse on strartup config.json will created
-            puts(colored.red('Whoops, you don\'t have any connections defined in your config!'))
-            puts('')
-            puts('Press "c" to create a new connection')
-        else:
-            puts(colored.cyan('Select a target (press "h" for help)'))
-
-            # Determine the longest host
-            longest_host = 5
-            longest_line = -1
-            longest_user = 5
-            longest_note = 5
-
-            for index, target in enumerate(targets):
-
-                # Host to connect
-                if 'host' in target:
-                    length = len(list(target['host']))
-                    # Check host length
-                    if length > longest_host:
-                        longest_host = length
-
-                if 'options' in target: #TODO: WTF?!
-                    length_opt = len(extract_user(target))
-                    # Check host length
-                    if length_opt > longest_user:
-                        longest_user = length_opt
-                else:
-                    length = len(list(target.keys())[0])
-                    # Check host length
-                    if length > longest_host:
-                        longest_host = length
-                        longest_user = 5
-
-                if longest_note > longest_user:
-                    longest_user = longest_note
-                else:
-                    longest_note = longest_user
-
-            if 'host' in target:
-                # Header
-                print_header('host', longest_host, longest_user, longest_note)
-
-            else:
-                # Header
-                print_header('grp', longest_host, longest_user, longest_note)
-
-            for index, target in enumerate(targets):
-
-                # Host to connect
-                if 'host' in target:
-                    if 'options' in target:
-                        user = extract_user(target)
-                    else:
-                        user = ''
-                    print_host(index, selected_target, target, longest_host, longest_user)
-
-                # Group of hosts
-                else:
-                    print_grp (index, selected_target, target, longest_host, longest_note)
-
-            print_footer(target, longest_host, longest_user, longest_note)
-
-        # Hang until we get a keypress
-        key = readchar.readkey()
-
-        if key == readchar.key.UP or key == 'k':
-            # Ensure the new selection would be valid
-            if (selected_target - 1) >= 0:
-                selected_target -= 1
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == readchar.key.DOWN or key == 'j':
-            # Ensure the new selection would be valid
-            if (selected_target + 1) <= (num_targets - 1):
-                selected_target += 1
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == 'g':
-            # Go to top
-            selected_target = 0
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == 'G':
-            # Go to bottom
-            selected_target = num_targets - 1
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == 'c':
-            # Go to top
-            target = targets[selected_target]
-            connection_create(list(target.keys())[0])
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == 'u':
-            # Go to previus menu level
-            config = json.loads(resources.user.read(config_name))
-            # p = find_parent(config, 'targets[*].' + father.pop())
-            break #TODO Thi is for debug?!?!?
-
-            # Empty the number buffer
-            number_buffer = []
-
-        elif key == 'q':
-            if 'host' in target:
-                # Go to main menu
-                config = json.loads(resources.user.read(config_name))
-                display_menu(config['targets'])
-
-                # Empty the number buffer
-                number_buffer = []
-            else:
-                exit(0)
-
-        elif key == readchar.key.ENTER:
-            # For cleanliness clear the screen
-            call(['tput', 'clear'])
-
-            target = targets[selected_target]
-
-            # Host to connect
-            if 'host' in target:
-
-                # Check if there is a custom command for this target
-                if 'command' in target.keys():
-                    command = target['command']
-                else:
-                    command = 'ssh'
-
-                if command == 'ssh':
-                    # Arguments to the child process should start with the name of the command being run
-                    args = [command] + target.get('options', []) + [target['host']]
-                    try:
-                        # After this line, ssh will replace the python process
-                        os.execvp(command, args)
-                    except FileNotFoundError:
-                        sys.exit('Command not found: {commandname}'.format(commandname=command))
-                elif target['connection_type'] == 'gssh':
-                    try:
-                        # After this line, ssh will replace the python process
-                        # TODO: move volume definition to configuration files
-                        command = 'docker run -it --rm --volumes-from gcloud-config -v $HOME/.certificati:/root/.ssh/ gcr.io/google.com/cloudsdktool/cloud-sdk gcloud compute ssh ' + target.get('host') + ' --zone ' + target.get('zone') + ' --project ' + target.get('project')
-                        os.system(command)
-                    except FileNotFoundError:
-                        sys.exit('Command not found: {commandname}'.format(commandname=command))
-
-            # Group of hosts
-            else:
-                list.append(father, list(target.keys())[0])
-                display_menu(target[list(target.keys())[0]])
-
-        elif key == 'h':
-            display_help()
-
-        elif key == readchar.key.CTRL_C:
-            exit(0)
-
-        # Check if key is a number
-        elif key in map(lambda x: str(x), range(10)):
-            requested_target = int(key)
-
-            # Check if there are any previously entered numbers, and append if less than one second has gone by
-            if round(time.time()) - number_last <= 1:
-                number_buffer += key
-                requested_target = int(''.join(number_buffer))
-                # If the new target is invalid, just keep the previously selected target instead
-                if requested_target >= num_targets:
-                    requested_target = selected_target
-            else:
-                number_buffer = [key]
-
-            number_last = round(time.time())
-
-            # Ensure the new selection would be valid
-            if requested_target >= num_targets:
-                requested_target = num_targets - 1
-
-            selected_target = requested_target
-
-main()
