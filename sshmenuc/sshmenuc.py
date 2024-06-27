@@ -156,9 +156,15 @@ class ConnectionNavigator:
             # elif key == 'd':
             #     self.delete_connection(current_path)
             elif key == readchar.key.ENTER:
+              if isinstance(self.get_node(current_path), list): # This to prevent a double print if current_path is on a list
+                # If the current node is a list, we have reached a target, so we can exit the loop
+                current_path.append(selected_target)
                 current_path.append(selected_target)
                 selected_target = 0
-
+              else:
+                # Otherwise, we need to go deeper into the structure
+                current_path.append(selected_target)
+                selected_target = 0
 
     def print_menu(self, selected_target, current_path: List[Any]):
 
@@ -168,16 +174,12 @@ class ConnectionNavigator:
         logging.debug("selected_target: %d", selected_target)
         logging.debug("current_path: %s", current_path)
         current_node = self.get_node(current_path)
+        logging.debug("current_node_type: %s", type(current_node))
+        logging.debug("current_node: %s", current_node)
         if isinstance(current_node, dict):
             self.print_table(current_node, selected_target, level=len(current_path))
         elif isinstance(current_node, list):
             self.print_table(current_node, selected_target, level=len(current_path)+1)
-            # for i, item in enumerate(current_node, start=1):
-            #     if isinstance(item, dict):
-            #         logging.debug("item is a dict 1")
-            #         self.print_table(item, selected_target, level=len(current_path)+1)
-            #     else:
-            #         print(f"{i}. {item}")
 
     def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
         tbl = "+--------+-----------------------------------+"
@@ -199,14 +201,32 @@ class ConnectionNavigator:
               t = i
               key = list(item.keys())[0]
               if (t == selected_target):
-                row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6} w {bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
               else:
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} w  {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
               print(row)
 
     def get_node(self, path: List[Any]):
         node: Union[dict, list] = self.config_data
         for item in path:
+            if isinstance(node, dict):
+                keys = list(node.keys())
+                if 0 <= item < len(keys):
+                    key = keys[item]
+                    if key in node:
+                        node = node[key]
+                    else:
+                        raise KeyError(f"Key '{key}' not found in dictionary.")
+            elif isinstance(node, list):
+                if item < len(node):
+                    node = node[item]
+            else:
+                raise TypeError(f"Unsupported type: {type(node)}")
+        return node
+
+    def get_previous_node(self, path: List[Any]):
+        node: Union[dict, list] = self.config_data
+        for item in path[:-1]:
             if isinstance(node, dict):
                 keys = list(node.keys())
                 if 0 <= item < len(keys):
@@ -239,6 +259,10 @@ class ConnectionNavigator:
         if current_path:
             if isinstance(self.get_node(current_path), dict):
                 current_path.pop()
+            elif isinstance(self.get_node(current_path), list) and len(current_path) > 1:
+                if isinstance(self.get_previous_node(current_path), dict):
+                  current_path.pop()
+                  current_path.pop()
             elif len(current_path) == 1:
               current_path.clear()
             elif current_path[-1] == 0:
