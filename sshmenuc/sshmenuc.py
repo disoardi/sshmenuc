@@ -158,7 +158,7 @@ class ConnectionNavigator:
             elif key == readchar.key.ENTER:
               if isinstance(self.get_node(current_path), list): # This to prevent a double print if current_path is on a list
                 # If the current node is a list, we have reached a target, so we can exit the loop
-                current_path.append(selected_target)
+                current_path.append(selected_target) # TODO look for a more elegant solution
                 current_path.append(selected_target)
                 selected_target = 0
               else:
@@ -182,7 +182,7 @@ class ConnectionNavigator:
             self.print_table(current_node, selected_target, level=len(current_path)+1)
 
     def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
-        tbl = "+--------+-----------------------------------+"
+        tbl = "+--------+-----------------------------------+" # TODO change with Notes if is last host connection element
         print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
         row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'#':>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'Description':^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
         print(row)
@@ -198,12 +198,17 @@ class ConnectionNavigator:
               print(row)
         elif isinstance(data, list):
             for i, item in enumerate(data):#, start=1):
-              t = i
               key = list(item.keys())[0]
-              if (t == selected_target):
-                row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6} w {bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+              if key == 'friendly': # I am in a finale node
+                  if (i == selected_target):
+                    self.print_row([i, item[key], item["connection_type"]], True, True) # TODO change row with print_row
+                  else:
+                    row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>6}{bcolors.OKCYAN}|{bcolors.ENDC}{item[key]:^33}{bcolors.OKCYAN}|{bcolors.ENDC}"
               else:
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} w  {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                  if (i == selected_target):
+                    row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6} w {bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                  else:
+                    row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} w  {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
               print(row)
 
     def get_node(self, path: List[Any]):
@@ -269,6 +274,23 @@ class ConnectionNavigator:
                 current_path.pop()
             else:
                 current_path[-1] -= 1
+
+    def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool):
+        if is_selected_targes:
+          if len(infos) == 3:
+            i, key, notes = infos
+            row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>6} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{key:^33} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{notes:^33} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+          else:
+            i, key = infos
+            row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>6} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{key:^33} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+        else:
+          if len(infos) == 3:
+            i, key, notes = infos
+            row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>6} {bcolors.OKCYAN}|{bcolors.ENDC}{key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}{notes:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+          else:
+            i, key = infos
+            row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>6} {bcolors.OKCYAN}|{bcolors.ENDC}{key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
+        print(row)
 
     def create_connection(self, current_path: List[Any]):
         # Implement the logic to create a new connection
