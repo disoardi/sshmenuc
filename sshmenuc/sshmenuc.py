@@ -182,34 +182,32 @@ class ConnectionNavigator:
             self.print_table(current_node, selected_target, level=len(current_path)+1)
 
     def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
-        tbl = "+--------+-----------------------------------+" # TODO change with Notes if is last host connection element
-        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
-        row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'#':>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.HEADER}{'Description':^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
-        print(row)
-        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
-
         if isinstance(data, dict):
+            self.print_header(["Description"])
             keys = list(data.keys())
             for key in keys:
               if (keys.index(key) == selected_target):
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{keys.index(key):>6}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                self.print_row([keys.index(key), key], True, False)
               else:
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {keys.index(key):>6} {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
-              print(row)
+                self.print_row([keys.index(key), key], False, False)
         elif isinstance(data, list):
+            if "friendly" in data[0]:
+              self.print_header(["Description", "Connection Type"])
+            else:
+              self.print_header(["Description"])
             for i, item in enumerate(data):#, start=1):
               key = list(item.keys())[0]
               if key == 'friendly': # I am in a finale node
                   if (i == selected_target):
                     self.print_row([i, item[key], item["connection_type"]], True, True) # TODO change row with print_row
                   else:
-                    row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>6}{bcolors.OKCYAN}|{bcolors.ENDC}{item[key]:^33}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                    self.print_row([i, item[key], item["connection_type"]], False, True)
               else:
                   if (i == selected_target):
-                    row= f"{bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{i:>6} w {bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC} {bcolors.OKGREEN}{key:^33}{bcolors.ENDC} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                    self.print_row([i, key], True, False)
                   else:
-                    row = f"{bcolors.OKCYAN}|{bcolors.ENDC} {i:>6} w  {bcolors.OKCYAN}|{bcolors.ENDC} {key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
-              print(row)
+                    self.print_row([i, key], False, False)
+
 
     def get_node(self, path: List[Any]):
         node: Union[dict, list] = self.config_data
@@ -291,6 +289,21 @@ class ConnectionNavigator:
             i, key = infos
             row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>6} {bcolors.OKCYAN}|{bcolors.ENDC}{key:^33} {bcolors.OKCYAN}|{bcolors.ENDC}"
         print(row)
+
+    def print_header(self, header: tuple):
+        tbl = "+--------+-----------------------------------+"
+        tblNotes = "+--------+-----------------------------------+-----------------------------------+"
+        if len(header) == 2:
+            print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
+            Description, Notes = header
+            print(f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>6}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Description:^33}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Notes:^33}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}")
+            print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
+        else:
+            print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+            Description = header
+            print(f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>6}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{header[0]:^33}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}")
+            print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+
 
     def create_connection(self, current_path: List[Any]):
         # Implement the logic to create a new connection
