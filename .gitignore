@@ -139,3 +139,5 @@ sshmenuc/bin/python
 sshmenuc/bin/python3.9
 poetry.lock
 sshmenuc/sshmenuc_old.py
+sshmenuc/workspace.code-workspace
+sshmenuc/__pycache__
