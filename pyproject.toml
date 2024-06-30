@@ -4,11 +4,13 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "Sshmenuc"
-version = "0.0.4"
-description = ""
-authors = [ "Davide Isoardi <davide.isoardi@dxc.com>",]
+version = "1.0.0"
+description = "Command line SSH menu and helper utility with cluster support"
+license = "MIT"
+maintainers = [ "Davide Isoardi <davide.@isoardi.info>"]
 readme = "README.md"
 package-mode = false
+repository = "https://github.com/disoardi/sshmenuc"
 
 [tool.poetry.dependencies]
 python = "^3.9"

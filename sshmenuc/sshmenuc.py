@@ -1,18 +1,23 @@
 import argparse
 import json
 import os
-import re
+#import re
 from typing import List, Any, Dict
 
 import readchar
 import sys, logging
-import time
+#import time
 
-from subprocess import call, Popen, PIPE
+import subprocess
 from clint import resources
 from clint.textui import puts, colored
 
-import docker
+import docker # used for Google Cloud ssh via gcp cli in docket image
+
+
+################################################
+#          Class to define the colors          #
+################################################
 
 class bcolors:
     HEADER = '\033[95m'
@@ -109,6 +114,11 @@ class ConnectionManager:
                 target[target_name].pop(connection_index)
                 break
 
+
+
+################################################
+#    Class to navigate and create the menu'    #
+################################################
 class ConnectionNavigator:
     global selected_target
     def __init__(self, config_file: str):
@@ -157,57 +167,19 @@ class ConnectionNavigator:
             #     self.delete_connection(current_path)
             elif key == readchar.key.ENTER:
               if isinstance(self.get_node(current_path), list): # This to prevent a double print if current_path is on a list
-                # If the current node is a list, we have reached a target, so we can exit the loop
-                current_path.append(selected_target) # TODO look for a more elegant solution
-                current_path.append(selected_target)
-                selected_target = 0
+                  current_node = self.get_node(current_path)
+                  if "friendly" in current_node[0]: # If is a host call command
+                      #if current_node[0]['connection_type'] == "ssh": # TODO create different call
+                      launcher = SSHLauncher('192.168.88.11', "abacus", identity_file="/Users/disoardi/.certificati/passepartout")
+                      launcher.launch()
+                  else:  
+                      # If the current node is a list, we have reached a target, so we can exit the loop
+                      current_path.extend([selected_target, 0])
+                      selected_target = 0
               else:
-                # Otherwise, we need to go deeper into the structure
-                current_path.append(selected_target)
-                selected_target = 0
-
-    def print_menu(self, selected_target, current_path: List[Any]):
-
-        clear_screen = lambda:  os.system('cls') if os.name == 'nt'  else os.system('clear')
-        lambda x: True if x % 2 == 0 else False
-        clear_screen()
-        logging.debug("selected_target: %d", selected_target)
-        logging.debug("current_path: %s", current_path)
-        current_node = self.get_node(current_path)
-        logging.debug("current_node_type: %s", type(current_node))
-        logging.debug("current_node: %s", current_node)
-        if isinstance(current_node, dict):
-            self.print_table(current_node, selected_target, level=len(current_path))
-        elif isinstance(current_node, list):
-            self.print_table(current_node, selected_target, level=len(current_path)+1)
-
-    def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
-        if isinstance(data, dict):
-            self.print_header(["Description"])
-            keys = list(data.keys())
-            for key in keys:
-              if (keys.index(key) == selected_target):
-                self.print_row([keys.index(key), key], True, False)
-              else:
-                self.print_row([keys.index(key), key], False, False)
-        elif isinstance(data, list):
-            if "friendly" in data[0]:
-              self.print_header(["Description", "Connection Type"])
-            else:
-              self.print_header(["Description"])
-            for i, item in enumerate(data):
-              key = list(item.keys())[0]
-              if key == 'friendly': # I am in a finale node
-                  if (i == selected_target):
-                    self.print_row([i, item[key], item["connection_type"]], True, True)
-                  else:
-                    self.print_row([i, item[key], item["connection_type"]], False, True)
-              else:
-                  if (i == selected_target):
-                    self.print_row([i, key], True, False)
-                  else:
-                    self.print_row([i, key], False, False)
-
+                  # Otherwise, we need to go deeper into the structure
+                  current_path.append(selected_target)
+                  selected_target = 0
 
     def get_node(self, path: List[Any]):
         node: Union[dict, list] = self.config_data
@@ -273,6 +245,50 @@ class ConnectionNavigator:
             else:
                 current_path[-1] -= 1
 
+    ################################################
+    # Function to print Menu', items and structure #
+    ################################################
+    def print_menu(self, selected_target, current_path: List[Any]):
+        clear_screen = lambda:  os.system('cls') if os.name == 'nt'  else os.system('clear')
+        lambda x: True if x % 2 == 0 else False
+        clear_screen()
+        logging.debug("selected_target: %d", selected_target)
+        logging.debug("current_path: %s", current_path)
+        current_node = self.get_node(current_path)
+        logging.debug("current_node_type: %s", type(current_node))
+        logging.debug("current_node: %s", current_node)
+        if isinstance(current_node, dict):
+            self.print_table(current_node, selected_target, level=len(current_path))
+        elif isinstance(current_node, list):
+            self.print_table(current_node, selected_target, level=len(current_path)+1)
+
+    def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
+        if isinstance(data, dict):
+            self.print_header(["Description"])
+            keys = list(data.keys())
+            for key in keys:
+              if (keys.index(key) == selected_target):
+                self.print_row([keys.index(key), key], True, False)
+              else:
+                self.print_row([keys.index(key), key], False, False)
+        elif isinstance(data, list):
+            if "friendly" in data[0]:
+              self.print_header(["Description", "Connection Type"])
+            else:
+              self.print_header(["Description"])
+            for i, item in enumerate(data):
+              key = list(item.keys())[0]
+              if key == 'friendly': # I am in a finale node
+                  if (i == selected_target):
+                    self.print_row([i, item[key], item["connection_type"]], True, True)
+                  else:
+                    self.print_row([i, item[key], item["connection_type"]], False, True)
+              else:
+                  if (i == selected_target):
+                    self.print_row([i, key], True, False)
+                  else:
+                    self.print_row([i, key], False, False)
+
     def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool):
         if is_selected_targes:
           if len(infos) == 3:
@@ -304,18 +320,39 @@ class ConnectionNavigator:
             print(f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{header[0]:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}")
             print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
 
+################################################
+# Class to manage ssh connection               #
+################################################
+class SSHLauncher:
+    def __init__(self, host, username, port=22, identity_file=None):
+        self.host = host
+        self.username = username
+        self.port = port
+        self.identity_file = identity_file
 
-    def create_connection(self, current_path: List[Any]):
-        # Implement the logic to create a new connection
-        pass
+    def launch(self):
+        ssh_command = ["ssh"]
 
-    def modify_connection(self, current_path: List[Any]):
-        # Implement the logic to modify an existing connection
-        pass
+        if self.identity_file:
+            ssh_command.extend(["-i", self.identity_file])
 
-    def delete_connection(self, current_path: List[Any]):
-        # Implement the logic to delete an existing connection
-        pass
+        ssh_command.extend([f"{self.username}@{self.host}", "-p", str(self.port)])
+
+        try:
+            subprocess.run(ssh_command)
+        except Exception as e:
+            print(f"Error launching SSH client: {e}")
+
+    # Example usage
+    #launcher = SSHLauncher("example.com", "your_username", identity_file="/path/to/your/key.pem")
+    #launcher.launch()
+
+
+
+
+################################################
+#                     Main                     #
+################################################
 
 def main():
     parser = argparse.ArgumentParser(description="SSH Connection Manager")
