@@ -414,3 +414,4 @@ def main():
 #config.delete_connection("new_target_name", 0)
 #config.save_config()
 
+main()
