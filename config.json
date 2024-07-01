@@ -5,18 +5,16 @@
                 {
                     "friendly": "coordinator01",
                     "host": "coordinator01",
-                    "connection_type": "gssh",
-                    "command": "docker",
-                    "zone": "cloud_zone",
-                    "project": "project_name"
+                    "connection_type": "ssh",
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
                 }, 
                 {
                   "friendly": "coordinator02",
                   "host": "coordinator02",
                   "connection_type": "ssh",
-                  "command": "ssh",
-                  "zone": "on_prem",
-                  "project": "project_name"
+                  "user": "XXXX",
+                  "certkey": "path_to_cert"
               }
             ]
         },
@@ -25,10 +23,7 @@
                 {
                     "friendly": "master01",
                     "host": "master01",
-                    "connection_type": "ssh",
-                    "command": "ssh",
-                    "zone": "cloud_zone",
-                    "project": "newprj"
+                    "connection_type": "ssh"
                 }
             ]
         }
@@ -40,9 +35,8 @@
                     "friendly": "first",
                     "host": "coordinator01",
                     "connection_type": "gssh",
-                    "command": "docker",
-                    "zone": "cloud_zone",
-                    "project": "project_name"
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
                 }
             ]
         },
@@ -52,9 +46,8 @@
                     "friendly": "second",
                     "host": "coordinator01",
                     "connection_type": "gssh",
-                    "command": "docker",
-                    "zone": "cloud_zone",
-                    "project": "project_name"
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
                 }
             ]
         },
@@ -64,9 +57,8 @@
                     "friendly": "third",
                     "host": "coordinator01",
                     "connection_type": "gssh",
-                    "command": "docker",
-                    "zone": "cloud_zone",
-                    "project": "project_name"
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
                 }
             ]
         },
@@ -75,10 +67,7 @@
                 {
                     "friendly": "four",
                     "host": "coordinator02",
-                    "connection_type": "gssh",
-                    "command": "docker",
-                    "zone": "cloud_zone",
-                    "project": "project_name"
+                    "connection_type": "gssh"
                 }
             ]
         }

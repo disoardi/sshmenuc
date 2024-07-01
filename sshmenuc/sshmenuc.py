@@ -168,9 +168,17 @@ class ConnectionNavigator:
             elif key == readchar.key.ENTER:
               if isinstance(self.get_node(current_path), list): # This to prevent a double print if current_path is on a list
                   current_node = self.get_node(current_path)
-                  if "friendly" in current_node[0]: # If is a host call command
+                  if "friendly" in current_node[selected_target]: # If is a host call command
                       #if current_node[0]['connection_type'] == "ssh": # TODO create different call
-                      launcher = SSHLauncher('192.168.88.11', "abacus", identity_file="/Users/disoardi/.certificati/passepartout")
+                      host = current_node[selected_target]['host']
+                      if "user" in current_node[selected_target]:
+                          user = current_node[selected_target]['user']
+                      else:
+                          user = os.getlogin()
+                      if "certkey" in current_node[selected_target]:
+                          launcher = SSHLauncher(host, user, current_node[selected_target]['certkey'])
+                      else:
+                          launcher = SSHLauncher(host, user)
                       launcher.launch()
                   else:  
                       # If the current node is a list, we have reached a target, so we can exit the loop
@@ -340,6 +348,8 @@ class SSHLauncher:
 
         try:
             subprocess.run(ssh_command)
+            if (logging.getLogger().level == logging.DEBUG):
+                readchar.readkey()
         except Exception as e:
             print(f"Error launching SSH client: {e}")
 
@@ -356,7 +366,7 @@ class SSHLauncher:
 
 def main():
     parser = argparse.ArgumentParser(description="SSH Connection Manager")
-    parser.add_argument("-c", "--config", help="Path to the config file", default="config.json")
+    parser.add_argument("-c", "--config", help="Path to the config file", default=os.path.expanduser('~') + "/.config/sshmenuc/config.json")
     parser.add_argument("-l", "--loglevel", help="Severity of log level: debug, info (default), warning, error and critical", default="default")
     args = parser.parse_args()
     print(args)
