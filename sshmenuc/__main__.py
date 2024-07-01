@@ -1,3 +1,4 @@
-"""Called when launched with python -m sshmenuc"""
+"""For execute sshmenuc as a module"""
+
 from .sshmenuc import main
 main()
