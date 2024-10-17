@@ -3,7 +3,7 @@ import json
 import os
 
 # import re
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Union
 
 import readchar
 import sys, logging
