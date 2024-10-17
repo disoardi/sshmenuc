@@ -124,3 +124,4 @@ sshmenu/lib64
 sshmenu/pyvenv.cfg
 sshmenu/json_test.py
 .gitignore
+poetry.lock
