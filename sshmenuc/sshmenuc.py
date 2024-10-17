@@ -350,7 +350,7 @@ class ConnectionNavigator:
         if is_selected_targes:
             if len(infos) == 3:
                 i, key, notes = infos
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes:<35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
             else:
                 i, key = infos
                 row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
