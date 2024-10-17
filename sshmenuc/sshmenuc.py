@@ -209,7 +209,7 @@ class ConnectionNavigator:
                             user = os.getlogin()
                         if "certkey" in current_node[selected_target]:
                             launcher = SSHLauncher(
-                                host, user, current_node[selected_target]["certkey"]
+                                host, user, 22, current_node[selected_target]["certkey"]
                             )
                         else:
                             launcher = SSHLauncher(host, user)
