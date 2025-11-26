@@ -329,11 +329,11 @@ class ConnectionNavigator:
                 if key == "friendly":  # I am in a finale node
                     if i == selected_target:
                         self.print_row(
-                            [i, item[key], item["connection_type"]], True, True
+                            [item, item[key], item["connection_type"]], True, True
                         )
                     else:
                         self.print_row(
-                            [i, item[key], item["connection_type"]], False, True
+                            [item, item[key], item["connection_type"]], False, True
                         )
                 else:
                     if i == selected_target:
@@ -341,36 +341,40 @@ class ConnectionNavigator:
                     else:
                         self.print_row([i, key], False, False)
             if "friendly" in data[0]:
-                row = f"{bcolors.OKCYAN}+--------+------------------------------------+------------------------------------+{bcolors.ENDC}"
+                row = f"{bcolors.OKCYAN}+--------+------------------------------------+------------------------------------+------------------------------------+{bcolors.ENDC}"
             else:
                 row = f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}"
             print(row)
+
 
     def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool):
         if is_selected_targes:
             if len(infos) == 3:
                 i, key, notes = infos
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                user = infos[0].get('user', os.getlogin())  # Get user from config or default to system user
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {user:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
             else:
                 i, key = infos
                 row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
         else:
             if len(infos) == 3:
                 i, key, notes = infos
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>7} {bcolors.OKCYAN}|{bcolors.ENDC} {key:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {notes:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                user = infos[0].get('user', os.getlogin())  # Get user from config or default to system user
+                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>7} {bcolors.OKCYAN}|{bcolors.ENDC} {key:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {notes:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {user:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
             else:
                 i, key = infos
                 row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>7} {bcolors.OKCYAN}|{bcolors.ENDC} {key:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
         print(row)
 
+
     def print_header(self, header: tuple):
         tbl = "+--------+------------------------------------+"
-        tblNotes = "+--------+------------------------------------+------------------------------------+"
+        tblNotes = "+--------+------------------------------------+------------------------------------+------------------------------------+"
         if len(header) == 2:
             print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
             Description, Notes = header
             print(
-                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Description:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Notes:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Description:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Notes:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'User':^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
             )
             print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
         else:
@@ -380,6 +384,7 @@ class ConnectionNavigator:
                 f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{header[0]:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
             )
             print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+
 
 
 ################################################
