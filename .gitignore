@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+env/
 
 # C extensions
 *.so
@@ -124,4 +125,22 @@ sshmenu/lib64
 sshmenu/pyvenv.cfg
 sshmenu/json_test.py
 .gitignore
+sshmenuC.egg-info
+.vscode
+sshmenuc/bin
+sshmenuc/lib
+sshmenuc/lib64
+sshmenuc/json_test.json
+sshmenuc/json_test.py
+/.vscode
+/sshmenuc/bin
+sshmenuc/bin/python3
+sshmenuc/bin/python
+sshmenuc/bin/python3.9
 poetry.lock
+sshmenuc/sshmenuc_old.py
+sshmenuc/workspace.code-workspace
+sshmenuc/__pycache__
+.pytest_cache
+config_isp.json
+config_isp.json

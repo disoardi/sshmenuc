@@ -1,17 +1,75 @@
 {
-    "targets": [
+    "personal": [
         {
-            "test_0.0.4": [
-            {
-                "friendly": "coordinator01",
-                "host": "coordinator01",
-                "connection_type": "gssh",
-                "command": "docker",
-                "zone": "cloud_zone",
-                "project": "project_name"
-            }
+            "prod": [
+                {
+                    "friendly": "coordinator01",
+                    "host": "coordinator01",
+                    "connection_type": "ssh",
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
+                }, 
+                {
+                  "friendly": "coordinator02",
+                  "host": "coordinator02",
+                  "connection_type": "ssh",
+                  "user": "XXXX",
+                  "certkey": "path_to_cert"
+              }
+            ]
+        },
+        {
+            "dev": [
+                {
+                    "friendly": "master01",
+                    "host": "master01",
+                    "connection_type": "ssh"
+                }
+            ]
+        }
+    ],
+    "work": [
+        {
+            "first": [
+                {
+                    "friendly": "first",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
+                }
+            ]
+        },
+        {
+            "second.0.4": [
+                {
+                    "friendly": "second",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
+                }
+            ]
+        },
+        {
+            "third.0.4": [
+                {
+                    "friendly": "third",
+                    "host": "coordinator01",
+                    "connection_type": "gssh",
+                    "user": "XXXX",
+                    "certkey": "path_to_cert"
+                }
+            ]
+        },
+        {
+            "four.0.4": [
+                {
+                    "friendly": "four",
+                    "host": "coordinator02",
+                    "connection_type": "gssh"
+                }
             ]
         }
     ]
 }
-

@@ -3,7 +3,12 @@
 sshmenu fork for cluster managemnt
 
 ## Install
-
+```
+git clone https://github.com/disoardi/sshmenuc.git
+cd sshmenuc
+python3 -m build
+pip install -e .
+```
 
 
 ## ToDo
@@ -22,6 +27,8 @@ Davide Isoardi abacus@linux.it or business mail davide.isoardi@valuepartners.com
 
 ## Version History
 
+* 0.0.04
+    * add support for GCP ssh connection via google-sdk on docker
 * 0.1
     * create annidate menu
 
