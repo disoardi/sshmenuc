@@ -15,6 +15,10 @@ from clint import resources
 from clint.textui import puts, colored
 
 import docker  # used for Google Cloud ssh via gcp cli in docket image
+import shutil
+import time
+import re
+import shlex
 
 
 ################################################
@@ -470,7 +474,6 @@ class ConnectionNavigator:
             print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
 
 
-
 ################################################
 # Class to manage ssh connection               #
 ################################################
@@ -490,7 +493,22 @@ class SSHLauncher:
         ssh_command.extend([f"{self.username}@{self.host}", "-p", str(self.port)])
 
         try:
-            subprocess.run(ssh_command)
+            # If tmux is available, create (and attach) a tmux session named host-timestamp
+            if shutil.which("tmux"):
+                # sanitize session name: keep alnum, underscore, dash
+                session_raw = f"{self.host}-{int(time.time())}"
+                session = re.sub(r"[^A-Za-z0-9_-]+", "-", session_raw)
+
+                # build a safely quoted ssh command string for tmux
+                ssh_cmd_str = " ".join(shlex.quote(p) for p in ssh_command)
+
+                # create and attach new tmux session that runs the ssh command
+                tmux_cmd = ["tmux", "new-session", "-s", session, ssh_cmd_str]
+                subprocess.run(tmux_cmd)
+            else:
+                # fallback: run ssh directly
+                subprocess.run(ssh_command)
+
             if logging.getLogger().level == logging.DEBUG:
                 readchar.readkey()
         except Exception as e:
