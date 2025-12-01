@@ -314,56 +314,140 @@ class ConnectionNavigator:
             keys = list(data.keys())
             for key in keys:
                 if keys.index(key) == selected_target:
-                    self.print_row([keys.index(key), key], True, False)
+                    self.print_row([keys.index(key), key], True, False, False)
                 else:
-                    self.print_row([keys.index(key), key], False, False)
+                    self.print_row([keys.index(key), key], False, False, False)
             row = f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}"
             print(row)
         elif isinstance(data, list):
-            if "friendly" in data[0]:
+            # protezione se lista vuota
+            if not data:
+                return
+            # determina se è una lista di host (host dict) o gruppi
+            # consideriamo host anche i dict che hanno 'friendly' o 'host' (o almeno 'host')
+            table_has_host = any(isinstance(x, dict) and ("friendly" in x or "host" in x) for x in data)
+            if table_has_host:
                 self.print_header(["Description", "Connection Type"])
             else:
                 self.print_header(["Description"])
             for i, item in enumerate(data):
-                key = list(item.keys())[0]
-                if key == "friendly":  # I am in a finale node
+                # considera host i dict che hanno 'friendly' o 'host'
+                if isinstance(item, dict) and ("friendly" in item or "host" in item):
                     if i == selected_target:
-                        self.print_row(
-                            [item, item[key], item["connection_type"]], True, True
-                        )
+                        self.print_row([i, item, item.get("connection_type", "")], True, True, table_has_host)
                     else:
-                        self.print_row(
-                            [item, item[key], item["connection_type"]], False, True
-                        )
+                        self.print_row([i, item, item.get("connection_type", "")], False, True, table_has_host)
                 else:
+                    # gruppo: item è dict con una singola chiave o elemento non-host
+                    key = list(item.keys())[0] if isinstance(item, dict) and item else str(item)
                     if i == selected_target:
-                        self.print_row([i, key], True, False)
+                        self.print_row([i, key], True, False, table_has_host)
                     else:
-                        self.print_row([i, key], False, False)
-            if "friendly" in data[0]:
+                        self.print_row([i, key], False, False, table_has_host)
+            if table_has_host:
                 row = f"{bcolors.OKCYAN}+--------+------------------------------------+------------------------------------+------------------------------------+{bcolors.ENDC}"
             else:
                 row = f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}"
             print(row)
 
 
-    def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool):
-        if is_selected_targes:
-            if len(infos) == 3:
-                i, key, notes = infos
-                user = infos[0].get('user', os.getlogin())  # Get user from config or default to system user
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {user:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+    def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool, table_has_host: bool = False):
+        """
+        infos può essere:
+         - [index, key] per voci di gruppo
+         - [index, item_dict, connection_type] per host finali
+         - [item_dict, friendly, connection_type] (vecchio formato) ancora supportato
+        table_has_host indica se la tabella corrente ha le colonne notes/user (da header).
+        """
+        # default values
+        idx_display = ""
+        title = ""
+        notes = ""
+        user = os.getlogin()
+
+        # Normalizza i valori in base al formato di infos
+        if len(infos) == 3:
+            first, second, third = infos
+            # caso nuovo: first = index (int), second = item dict, third = connection_type
+            if isinstance(first, int) and isinstance(second, dict):
+                idx_display = f"{first:>7}"
+                item_dict = second
+                title = item_dict.get("friendly", item_dict.get("host", ""))
+                notes = third or item_dict.get("connection_type", "")
+                user = item_dict.get("user", os.getlogin())
+            # caso vecchio: first = item dict, second = friendly, third = connection_type
+            elif isinstance(first, dict):
+                item_dict = first
+                idx_display = f"{infos[0]:>7}" if isinstance(infos[0], int) else ""
+                title = second
+                notes = third or item_dict.get("connection_type", "")
+                user = item_dict.get("user", os.getlogin())
+            # caso generico: first è indice, second è titolo stringa
             else:
-                i, key = infos
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{i:>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {key:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                idx_display = f"{first:>7}"
+                title = second
+                notes = third or ""
         else:
-            if len(infos) == 3:
-                i, key, notes = infos
-                user = infos[0].get('user', os.getlogin())  # Get user from config or default to system user
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>7} {bcolors.OKCYAN}|{bcolors.ENDC} {key:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {notes:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {user:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
+            # len == 2 ; formato [index, key]
+            idx_display = f"{infos[0]:>7}"
+            title = infos[1]
+            notes = ""
+            user = os.getlogin()
+
+        # assicurarsi che siano stringhe per la formattazione
+        idx_display = str(idx_display)
+        title = "" if title is None else str(title)
+        notes = "" if notes is None else str(notes)
+        user = "" if user is None else str(user)
+
+        # placeholder per colonne aggiuntive (quando la tabella ha host ma la riga non è host)
+        notes_field = f"{notes:<35}"
+        user_field = f"{user:<35}"
+        empty_notes = f"{'':<35}"
+        empty_user = f"{'':<35}"
+
+        # Costruisci la riga a seconda dello stato selezionato
+        if is_selected_targes:
+            if is_host:
+                row = (
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}"
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes_field}{bcolors.ENDC}"
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {user_field}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                )
             else:
-                i, key = infos
-                row = f"{bcolors.OKCYAN}|{bcolors.ENDC}{i:>7} {bcolors.OKCYAN}|{bcolors.ENDC} {key:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                if table_has_host:
+                    row = (
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}"
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {empty_notes}{bcolors.ENDC}"
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {empty_user}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                    )
+                else:
+                    row = (
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                    )
+        else:
+            if is_host:
+                row = (
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                    f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {notes_field}"
+                    f"{bcolors.OKCYAN}|{bcolors.ENDC} {user_field}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                )
+            else:
+                if table_has_host:
+                    row = (
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                        f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {empty_notes}"
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC} {empty_user}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                    )
+                else:
+                    row = (
+                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                        f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
+                    )
+
         print(row)
 
 

@@ -142,3 +142,5 @@ sshmenuc/sshmenuc_old.py
 sshmenuc/workspace.code-workspace
 sshmenuc/__pycache__
 .pytest_cache
+config_isp.json
+config_isp.json
