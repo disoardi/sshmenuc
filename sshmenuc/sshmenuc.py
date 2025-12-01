@@ -484,25 +484,65 @@ class SSHLauncher:
         self.port = port
         self.identity_file = identity_file
 
+    def _sanitize_session_name(self, raw: str) -> str:
+        # keep alnum, underscore, dash
+        return re.sub(r"[^A-Za-z0-9_-]+", "-", raw)
+
+    def _list_tmux_sessions(self) -> List[str]:
+        try:
+            res = subprocess.run(["tmux", "ls"], capture_output=True, text=True)
+            if res.returncode != 0:
+                return []
+            lines = [l.strip() for l in res.stdout.splitlines() if l.strip()]
+            sessions = []
+            for line in lines:
+                # tmux ls format: "session_name: N windows (created ...)"
+                parts = line.split(":", 1)
+                if parts:
+                    sessions.append(parts[0])
+            return sessions
+        except Exception:
+            return []
+
     def launch(self):
         ssh_command = ["ssh"]
-
         if self.identity_file:
             ssh_command.extend(["-i", self.identity_file])
-
         ssh_command.extend([f"{self.username}@{self.host}", "-p", str(self.port)])
 
         try:
-            # If tmux is available, create (and attach) a tmux session named host-timestamp
             if shutil.which("tmux"):
-                # sanitize session name: keep alnum, underscore, dash
+                sanitized_host = self._sanitize_session_name(self.host)
+                existing = self._list_tmux_sessions()
+                # find sessions that start with sanitized_host-
+                matches = [s for s in existing if s.startswith(f"{sanitized_host}-")]
+
+                if matches:
+                    # if multiple, let user pick; if single, ask attach or new
+                    if len(matches) == 1:
+                        choice = input(f"Found tmux session '{matches[0]}'. Attach (a) or create new (n)? [a/n]: ").strip().lower()
+                        if choice == "a" or choice == "":
+                            tmux_cmd = ["tmux", "attach-session", "-t", matches[0]]
+                            subprocess.run(tmux_cmd)
+                            return
+                        # else fallthrough to create new
+                    else:
+                        print("Found existing tmux sessions for this host:")
+                        for idx, s in enumerate(matches):
+                            print(f"  {idx}) {s}")
+                        sel = input("Select index to attach or press Enter to create a new session: ").strip()
+                        if sel.isdigit():
+                            sel_i = int(sel)
+                            if 0 <= sel_i < len(matches):
+                                tmux_cmd = ["tmux", "attach-session", "-t", matches[sel_i]]
+                                subprocess.run(tmux_cmd)
+                                return
+                        # else fallthrough to create new
+
+                # create a new session named <sanitized_host>-<timestamp>
                 session_raw = f"{self.host}-{int(time.time())}"
-                session = re.sub(r"[^A-Za-z0-9_-]+", "-", session_raw)
-
-                # build a safely quoted ssh command string for tmux
+                session = self._sanitize_session_name(session_raw)
                 ssh_cmd_str = " ".join(shlex.quote(p) for p in ssh_command)
-
-                # create and attach new tmux session that runs the ssh command
                 tmux_cmd = ["tmux", "new-session", "-s", session, ssh_cmd_str]
                 subprocess.run(tmux_cmd)
             else:
