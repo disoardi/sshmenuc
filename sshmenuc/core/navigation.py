@@ -1,0 +1,196 @@
+"""
+Gestione della navigazione nel menu.
+"""
+import os
+import logging
+from typing import List, Any, Dict, Union
+import readchar
+from clint.textui import puts, colored
+
+from .base import BaseSSHMenuC
+from .launcher import SSHLauncher
+from ..ui.display import MenuDisplay
+
+
+class ConnectionNavigator(BaseSSHMenuC):
+    """Gestisce la navigazione nel menu delle connessioni."""
+    
+    def __init__(self, config_file: str):
+        super().__init__(config_file)
+        self.load_config()
+        self.marked_indices = set()
+        self.display = MenuDisplay()
+    
+    def validate_config(self) -> bool:
+        """Valida la configurazione per la navigazione."""
+        return isinstance(self.config_data, dict) and "targets" in self.config_data
+    
+    def navigate(self):
+        """Loop principale di navigazione."""
+        current_path = []
+        selected_target = 0
+        
+        while True:
+            num_targets = self.count_elements(current_path)
+            self.print_menu(selected_target, current_path)
+            key = readchar.readkey()
+            
+            if key == "q":
+                break
+            elif key == readchar.key.DOWN:
+                if selected_target < num_targets - 1 or num_targets == 0:
+                    selected_target += 1
+            elif key == readchar.key.UP:
+                if selected_target > 0:
+                    selected_target -= 1
+            elif key == readchar.key.LEFT:
+                self.marked_indices.clear()
+                self.move_left(current_path)
+                selected_target = 0
+            elif key == " ":
+                self._handle_selection(current_path, selected_target)
+            elif key == readchar.key.ENTER:
+                self._handle_enter(current_path, selected_target)
+    
+    def _handle_selection(self, current_path: List[Any], selected_target: int):
+        """Gestisce la selezione con spazio."""
+        node = self.get_node(current_path)
+        if isinstance(node, list):
+            if selected_target in self.marked_indices:
+                self.marked_indices.remove(selected_target)
+            else:
+                if len(self.marked_indices) < 6:
+                    self.marked_indices.add(selected_target)
+                else:
+                    puts(colored.red("Maximum 6 selections allowed"))
+    
+    def _handle_enter(self, current_path: List[Any], selected_target: int):
+        """Gestisce l'invio."""
+        node = self.get_node(current_path)
+        
+        if isinstance(node, list) and self.marked_indices:
+            self._launch_multiple_hosts(node)
+        else:
+            self._handle_single_selection(node, selected_target, current_path)
+    
+    def _launch_multiple_hosts(self, node: List[Any]):
+        """Lancia connessioni multiple."""
+        selected_hosts = []
+        for i in sorted(self.marked_indices):
+            if 0 <= i < len(node):
+                item = node[i]
+                if isinstance(item, dict) and ("host" in item or "friendly" in item):
+                    host = item.get("host", item.get("friendly"))
+                    user = item.get("user", os.getlogin())
+                    ident = item.get("certkey", item.get("identity_file", None))
+                    selected_hosts.append({"host": host, "user": user, "identity": ident})
+        
+        if selected_hosts:
+            SSHLauncher.launch_group(selected_hosts)
+            self.marked_indices.clear()
+        else:
+            puts(colored.red("No valid hosts selected"))
+    
+    def _handle_single_selection(self, node: Any, selected_target: int, current_path: List[Any]):
+        """Gestisce selezione singola."""
+        if isinstance(node, list):
+            if "friendly" in node[selected_target]:
+                host = node[selected_target]["host"]
+                user = node[selected_target].get("user", os.getlogin())
+                identity = node[selected_target].get("certkey")
+                launcher = SSHLauncher(host, user, 22, identity)
+                launcher.launch()
+            else:
+                current_path.extend([selected_target, 0])
+        else:
+            current_path.append(selected_target)
+    
+    def get_node(self, path: List[Any]):
+        """Restituisce il nodo corrente nel percorso."""
+        targets = self.config_data.get("targets", [])
+        aggregated: Dict[str, Any] = {}
+        for t in targets:
+            if isinstance(t, dict):
+                for k, v in t.items():
+                    aggregated[k] = v
+        
+        if not path:
+            return aggregated
+        
+        cur: Union[dict, list, Any] = aggregated
+        for item in path:
+            if isinstance(cur, dict):
+                keys = list(cur.keys())
+                if 0 <= item < len(keys):
+                    key = keys[item]
+                    cur = cur[key]
+                else:
+                    return cur
+            elif isinstance(cur, list):
+                if 0 <= item < len(cur):
+                    cur = cur[item]
+                else:
+                    return cur
+            else:
+                return cur
+        return cur
+    
+    def get_previous_node(self, path: List[Any]):
+        """Restituisce il nodo precedente."""
+        node: Union[dict, list] = self.config_data
+        for item in path[:-1]:
+            if isinstance(node, dict):
+                keys = list(node.keys())
+                if 0 <= item < len(keys):
+                    key = keys[item]
+                    if key in node:
+                        node = node[key]
+                    else:
+                        raise KeyError(f"Key '{key}' not found in dictionary.")
+            elif isinstance(node, list):
+                if item < len(node):
+                    node = node[item]
+            else:
+                raise TypeError(f"Unsupported type: {type(node)}")
+        return node
+    
+    def count_elements(self, current_path: List[Any]) -> int:
+        """Conta gli elementi nel nodo corrente."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict):
+            return len(node)
+        elif isinstance(node, list):
+            return sum(1 for item in node if isinstance(item, dict))
+        else:
+            return 0
+    
+    def move_left(self, current_path: List[Any]):
+        """Gestisce il movimento a sinistra."""
+        if current_path:
+            if isinstance(self.get_node(current_path), dict):
+                current_path.pop()
+            elif isinstance(self.get_node(current_path), list) and len(current_path) > 1:
+                if isinstance(self.get_previous_node(current_path), dict):
+                    current_path.pop()
+                    current_path.pop()
+            elif len(current_path) == 1:
+                current_path.clear()
+            elif current_path[-1] == 0:
+                current_path.pop()
+            else:
+                current_path[-1] -= 1
+    
+    def print_menu(self, selected_target: int, current_path: List[Any]):
+        """Stampa il menu corrente."""
+        self.display.clear_screen()
+        self.display.print_instructions()
+        
+        logging.debug("selected_target: %d", selected_target)
+        logging.debug("current_path: %s", current_path)
+        
+        current_node = self.get_node(current_path)
+        logging.debug("current_node_type: %s", type(current_node))
+        logging.debug("current_node: %s", current_node)
+        
+        level = len(current_path) if isinstance(current_node, dict) else len(current_path) + 1
+        self.display.print_table(current_node, selected_target, self.marked_indices, level)
