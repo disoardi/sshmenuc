@@ -146,6 +146,52 @@ class ConnectionManager:
                 target[target_name].pop(connection_index)
                 break
 
+    def load_config(self):
+        """
+        Carica e normalizza il file di configurazione in self.config_data.
+        Supporta due formati:
+         - {"targets": [...]} (formato già corretto)
+         - { "Group A": [...], "Group B": [...] } -> viene convertito in {"targets":[{"Group A": [...]}, ...]}
+        In caso di file mancante o JSON non valido crea una struttura vuota.
+        """
+        try:
+            with open(self.config_file, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "targets" not in data:
+                    targets = []
+                    for k, v in data.items():
+                        targets.append({k: v})
+                    self.config_data = {"targets": targets}
+                else:
+                    self.config_data = data
+        except FileNotFoundError:
+            try:
+                os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+            except Exception:
+                pass
+            self.config_data = {"targets": []}
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON in '{self.config_file}'. Using empty configuration.")
+            self.config_data = {"targets": []}
+
+    def has_global_hosts(self) -> bool:
+        """
+        Return True if there is at least one host (dict with 'host' or 'friendly')
+        anywhere in self.config_data['targets'] for this navigator instance.
+        """
+        cfg = getattr(self, "config_data", {})
+        if not isinstance(cfg, dict):
+            return False
+        targets = cfg.get("targets", []) if isinstance(cfg.get("targets", []), list) else []
+        for t in targets:
+            if isinstance(t, dict):
+                for v in t.values():
+                    if isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                                return True
+        return False
+
 
 ################################################
 #    Class to navigate and create the menu'    #
@@ -157,93 +203,173 @@ class ConnectionNavigator:
         self.config_file = config_file
         self.config_data: Dict[str, Any]
         self.load_config()
+        # set di indici selezionati nella vista corrente
+        self.marked_indices = set()
 
     def load_config(self):
+        """
+        Carica e normalizza il file di configurazione in self.config_data.
+        Supporta due formati:
+         - {"targets": [...]} (formato già corretto)
+         - { "Group A": [...], "Group B": [...] } -> viene convertito in {"targets":[{"Group A": [...]}, ...]}
+        In caso di file mancante o JSON non valido crea una struttura vuota.
+        """
         try:
-            with open(self.config_file, "r") as file:
-                self.config_data = json.load(file)
-                logging.debug("Load config file %s", self.config_data)
+            with open(self.config_file, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "targets" not in data:
+                    targets = []
+                    for k, v in data.items():
+                        targets.append({k: v})
+                    self.config_data = {"targets": targets}
+                else:
+                    self.config_data = data
         except FileNotFoundError:
-            logging.error(f"Config file '{self.config_file}' not found.")
+            try:
+                os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+            except Exception:
+                pass
+            self.config_data = {"targets": []}
         except json.JSONDecodeError:
-            logging.critical(f"Error decoding JSON in '{self.config_file}'.")
+            print(f"Error decoding JSON in '{self.config_file}'. Using empty configuration.")
+            self.config_data = {"targets": []}
+
+    def has_global_hosts(self) -> bool:
+        """
+        Return True if there is at least one host (dict with 'host' or 'friendly')
+        anywhere in self.config_data['targets'] for this navigator instance.
+        """
+        cfg = getattr(self, "config_data", {})
+        if not isinstance(cfg, dict):
+            return False
+        targets = cfg.get("targets", []) if isinstance(cfg.get("targets", []), list) else []
+        for t in targets:
+            if isinstance(t, dict):
+                for v in t.values():
+                    if isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                                return True
+        return False
 
     def navigate(self):
         current_path = []
-        # Keep track of currently selected target
         selected_target = 0
         while True:
             num_targets = self.count_elements(current_path)
             self.print_menu(selected_target, current_path)
             key = readchar.readkey()
 
+            # Quit
             if key == "q":
                 break
+
+            # Arrow navigation
             elif key == readchar.key.DOWN:
-                # Ensure the new selection would be valid
                 if ((selected_target) < (num_targets - 1)) or num_targets == 0:
                     selected_target += 1
             elif key == readchar.key.UP:
-                # Ensure the new selection would be valid
                 if (selected_target - 1) >= 0:
                     selected_target -= 1
-            # elif key == '\x1b[C':  # Right arrow
-            #     self.move_right(current_path)
+
             elif key == readchar.key.LEFT:  # Left arrow
+                # clear selection when moving up a level
+                self.marked_indices.clear()
                 self.move_left(current_path)
-            # elif key == 'c':
-            #     self.create_connection(current_path)
-            # elif key == 'm':
-            #     self.modify_connection(current_path)
-            # elif key == 'd':
-            #     self.delete_connection(current_path)
-            elif key == readchar.key.ENTER:
-                if isinstance(
-                    self.get_node(current_path), list
-                ):  # This to prevent a double print if current_path is on a list
-                    current_node = self.get_node(current_path)
-                    if (
-                        "friendly" in current_node[selected_target]
-                    ):  # If is a host call command
-                        # if current_node[0]['connection_type'] == "ssh": # TODO create different call
-                        host = current_node[selected_target]["host"]
-                        if "user" in current_node[selected_target]:
-                            user = current_node[selected_target]["user"]
-                        else:
-                            user = os.getlogin()
-                        if "certkey" in current_node[selected_target]:
-                            launcher = SSHLauncher(
-                                host, user, 22, current_node[selected_target]["certkey"]
-                            )
-                        else:
-                            launcher = SSHLauncher(host, user)
-                        launcher.launch()
+                selected_target = 0
+
+            # Toggle selection (space) quando siamo su una lista
+            elif key == " ":
+                node = self.get_node(current_path)
+                if isinstance(node, list):
+                    # toggle selezione per l'indice corrente
+                    if selected_target in self.marked_indices:
+                        self.marked_indices.remove(selected_target)
                     else:
-                        # If the current node is a list, we have reached a target, so we can exit the loop
-                        current_path.extend([selected_target, 0])
-                        selected_target = 0
+                        if len(self.marked_indices) < 6:
+                            self.marked_indices.add(selected_target)
+                        else:
+                            # massimo 6
+                            puts(colored.red("Maximum 6 selections allowed"))
+                # rimani sulla stessa riga
+
+            elif key == readchar.key.ENTER:
+                node = self.get_node(current_path)
+                # se siamo su lista e ci sono selezioni multiple -> apri tmux con split
+                if isinstance(node, list) and self.marked_indices:
+                    # raccogli gli host selezionati (solo voci host valide)
+                    selected_hosts = []
+                    for i in sorted(self.marked_indices):
+                        if 0 <= i < len(node):
+                            item = node[i]
+                            if isinstance(item, dict) and ("host" in item or "friendly" in item):
+                                host = item.get("host", item.get("friendly"))
+                                user = item.get("user", os.getlogin())
+                                ident = item.get("certkey", item.get("identity_file", None))
+                                selected_hosts.append({"host": host, "user": user, "identity": ident})
+                    if selected_hosts:
+                        # usa SSHLauncher per aprire sessione tmux con split panes
+                        SSHLauncher.launch_group(selected_hosts)
+                        # dopo lancio svuota selezioni
+                        self.marked_indices.clear()
+                    else:
+                        puts(colored.red("No valid hosts selected"))
                 else:
-                    # Otherwise, we need to go deeper into the structure
-                    current_path.append(selected_target)
-                    selected_target = 0
+                    # comportamento singolo come prima
+                    if isinstance(node, list):
+                        if (
+                            "friendly" in node[selected_target]
+                        ):
+                            host = node[selected_target]["host"]
+                            user = node[selected_target].get("user", os.getlogin())
+                            if "certkey" in node[selected_target]:
+                                launcher = SSHLauncher(host, user, 22, node[selected_target]["certkey"])
+                            else:
+                                launcher = SSHLauncher(host, user)
+                            launcher.launch()
+                        else:
+                            current_path.extend([selected_target, 0])
+                            selected_target = 0
+                    else:
+                        current_path.append(selected_target)
+                        selected_target = 0
 
     def get_node(self, path: List[Any]):
-        node: Union[dict, list] = self.config_data
+        """
+        Restituisce il nodo corrente. Se path è vuoto ritorna un dizionario
+        aggregato dei target (es. { "Group A": [...], "Group B": [...] }),
+        in modo da entrare direttamente nei gruppi all'avvio.
+        """
+        # Costruisci dict aggregato dai target (lista di dict con singola chiave)
+        targets = self.config_data.get("targets", [])
+        aggregated: Dict[str, Any] = {}
+        for t in targets:
+            if isinstance(t, dict):
+                for k, v in t.items():
+                    aggregated[k] = v
+
+        # Se path è vuoto ritorna l'aggregato (comportamento desiderato all'avvio)
+        if not path:
+            return aggregated
+
+        # Altrimenti percorri il path a partire dall'aggregato
+        cur: Union[dict, list, Any] = aggregated
         for item in path:
-            if isinstance(node, dict):
-                keys = list(node.keys())
+            if isinstance(cur, dict):
+                keys = list(cur.keys())
                 if 0 <= item < len(keys):
                     key = keys[item]
-                    if key in node:
-                        node = node[key]
-                    else:
-                        raise KeyError(f"Key '{key}' not found in dictionary.")
-            elif isinstance(node, list):
-                if item < len(node):
-                    node = node[item]
+                    cur = cur[key]
+                else:
+                    return cur
+            elif isinstance(cur, list):
+                if 0 <= item < len(cur):
+                    cur = cur[item]
+                else:
+                    return cur
             else:
-                raise TypeError(f"Unsupported type: {type(node)}")
-        return node
+                return cur
+        return cur
 
     def get_previous_node(self, path: List[Any]):
         node: Union[dict, list] = self.config_data
@@ -296,182 +422,138 @@ class ConnectionNavigator:
     ################################################
     # Function to print Menu', items and structure #
     ################################################
+    def node_has_hosts(self, node: Any) -> bool:
+        """
+        Return True if the given node (dict or list) contains at least one host
+        entry (dict with 'friendly' or 'host') among the visible items.
+        This checks only the current node's visible elements, so categories that
+        only contain subgroups won't trigger host columns.
+        """
+        if isinstance(node, dict):
+            for v in node.values():
+                if isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                            return True
+            return False
+        elif isinstance(node, list):
+            for item in node:
+                if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                    return True
+            return False
+        return False
+
     def print_menu(self, selected_target, current_path: List[Any]):
-        clear_screen = lambda: (
-            os.system("cls") if os.name == "nt" else os.system("clear")
-        )
-        lambda x: True if x % 2 == 0 else False
+        clear_screen = lambda: (os.system("cls") if os.name == "nt" else os.system("clear"))
         clear_screen()
+        # istruzioni di uso rapido
+        print("Navigate with ↑ ↓  select with SPACE (max 6)  press ENTER to open selected hosts  q to quit")
         logging.debug("selected_target: %d", selected_target)
         logging.debug("current_path: %s", current_path)
         current_node = self.get_node(current_path)
         logging.debug("current_node_type: %s", type(current_node))
         logging.debug("current_node: %s", current_node)
+
+        # Always print a single-column table (Description)
         if isinstance(current_node, dict):
             self.print_table(current_node, selected_target, level=len(current_path))
         elif isinstance(current_node, list):
             self.print_table(current_node, selected_target, level=len(current_path) + 1)
 
+
     def print_table(self, data: Dict[str, Any], selected_target: int, level: int):
+        """
+        Print a single-column table showing only Description.
+        Works for dict (keys = categories) and list (items = groups or hosts).
+        """
+        # header (single Description column)
+        self.print_header(["Description"])
+
         if isinstance(data, dict):
-            self.print_header(["Description"])
             keys = list(data.keys())
-            for key in keys:
-                if keys.index(key) == selected_target:
-                    self.print_row([keys.index(key), key], True, False, False)
+            for idx, key in enumerate(keys):
+                marked = idx in self.marked_indices
+                is_selected = idx == selected_target
+                self.print_row([idx, key], is_selected, is_host=False, is_marked=marked)
+            print(f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}")
+            return
+
+        # data is a list
+        if not data:
+            # empty list: still print separator
+            print(f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}")
+            return
+
+        for i, item in enumerate(data):
+            marked = i in self.marked_indices
+            # treat as host if dict contains 'friendly' or 'host'
+            if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                if i == selected_target:
+                    self.print_row([i, item], True, is_host=True, is_marked=marked)
                 else:
-                    self.print_row([keys.index(key), key], False, False, False)
-            row = f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}"
-            print(row)
-        elif isinstance(data, list):
-            # protezione se lista vuota
-            if not data:
-                return
-            # determina se è una lista di host (host dict) o gruppi
-            # consideriamo host anche i dict che hanno 'friendly' o 'host' (o almeno 'host')
-            table_has_host = any(isinstance(x, dict) and ("friendly" in x or "host" in x) for x in data)
-            if table_has_host:
-                self.print_header(["Description", "Connection Type"])
+                    self.print_row([i, item], False, is_host=True, is_marked=marked)
             else:
-                self.print_header(["Description"])
-            for i, item in enumerate(data):
-                # considera host i dict che hanno 'friendly' o 'host'
-                if isinstance(item, dict) and ("friendly" in item or "host" in item):
-                    if i == selected_target:
-                        self.print_row([i, item, item.get("connection_type", "")], True, True, table_has_host)
-                    else:
-                        self.print_row([i, item, item.get("connection_type", "")], False, True, table_has_host)
+                # category/group entry: show its single key as description
+                key = list(item.keys())[0] if isinstance(item, dict) and item else str(item)
+                if i == selected_target:
+                    self.print_row([i, key], True, is_host=False, is_marked=marked)
                 else:
-                    # gruppo: item è dict con una singola chiave o elemento non-host
-                    key = list(item.keys())[0] if isinstance(item, dict) and item else str(item)
-                    if i == selected_target:
-                        self.print_row([i, key], True, False, table_has_host)
-                    else:
-                        self.print_row([i, key], False, False, table_has_host)
-            if table_has_host:
-                row = f"{bcolors.OKCYAN}+--------+------------------------------------+------------------------------------+------------------------------------+{bcolors.ENDC}"
-            else:
-                row = f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}"
-            print(row)
+                    self.print_row([i, key], False, is_host=False, is_marked=marked)
+
+        print(f"{bcolors.OKCYAN}+--------+------------------------------------+{bcolors.ENDC}")
 
 
-    def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool, table_has_host: bool = False):
+    def print_row(self, infos: tuple, is_selected_targes: bool, is_host: bool, is_marked: bool = False):
         """
-        infos può essere:
-         - [index, key] per voci di gruppo
-         - [index, item_dict, connection_type] per host finali
-         - [item_dict, friendly, connection_type] (vecchio formato) ancora supportato
-        table_has_host indica se la tabella corrente ha le colonne notes/user (da header).
+        Simplified row printing: only Description column.
+        infos:
+         - [index, key] for categories
+         - [index, item_dict] for hosts (item_dict contains 'friendly' or 'host')
         """
-        # default values
+        # defaults
         idx_display = ""
         title = ""
-        notes = ""
-        user = os.getlogin()
-
-        # Normalizza i valori in base al formato di infos
-        if len(infos) == 3:
-            first, second, third = infos
-            # caso nuovo: first = index (int), second = item dict, third = connection_type
-            if isinstance(first, int) and isinstance(second, dict):
-                idx_display = f"{first:>7}"
-                item_dict = second
-                title = item_dict.get("friendly", item_dict.get("host", ""))
-                notes = third or item_dict.get("connection_type", "")
-                user = item_dict.get("user", os.getlogin())
-            # caso vecchio: first = item dict, second = friendly, third = connection_type
-            elif isinstance(first, dict):
-                item_dict = first
-                idx_display = f"{infos[0]:>7}" if isinstance(infos[0], int) else ""
-                title = second
-                notes = third or item_dict.get("connection_type", "")
-                user = item_dict.get("user", os.getlogin())
-            # caso generico: first è indice, second è titolo stringa
+        # normalize
+        if len(infos) == 2:
+            idx = infos[0]
+            second = infos[1]
+            idx_display = f"{idx:>7}"
+            if isinstance(second, dict):
+                title = second.get("friendly", second.get("host", ""))
             else:
-                idx_display = f"{first:>7}"
-                title = second
-                notes = third or ""
+                title = str(second)
         else:
-            # len == 2 ; formato [index, key]
-            idx_display = f"{infos[0]:>7}"
-            title = infos[1]
-            notes = ""
-            user = os.getlogin()
+            idx_display = str(infos[0])
+            title = str(infos[1])
 
-        # assicurarsi che siano stringhe per la formattazione
-        idx_display = str(idx_display)
-        title = "" if title is None else str(title)
-        notes = "" if notes is None else str(notes)
-        user = "" if user is None else str(user)
+        marker = "[x]" if is_marked and is_host else ("[ ]" if is_host else "   ")
 
-        # placeholder per colonne aggiuntive (quando la tabella ha host ma la riga non è host)
-        notes_field = f"{notes:<35}"
-        user_field = f"{user:<35}"
-        empty_notes = f"{'':<35}"
-        empty_user = f"{'':<35}"
-
-        # Costruisci la riga a seconda dello stato selezionato
+        # selected styling is only color; keep columns aligned
         if is_selected_targes:
-            if is_host:
-                row = (
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}"
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {notes_field}{bcolors.ENDC}"
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {user_field}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                )
-            else:
-                if table_has_host:
-                    row = (
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}"
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {empty_notes}{bcolors.ENDC}"
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {empty_user}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                    )
-                else:
-                    row = (
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {title:<35}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                    )
+            row = (
+                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN}{idx_display} {bcolors.ENDC}"
+                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.OKGREEN} {marker} {title:<31}{bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+            )
         else:
-            if is_host:
-                row = (
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
-                    f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {notes_field}"
-                    f"{bcolors.OKCYAN}|{bcolors.ENDC} {user_field}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                )
-            else:
-                if table_has_host:
-                    row = (
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
-                        f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC} {empty_notes}"
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC} {empty_user}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                    )
-                else:
-                    row = (
-                        f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
-                        f" {title:<35}{bcolors.OKCYAN}|{bcolors.ENDC}"
-                    )
+            row = (
+                f"{bcolors.OKCYAN}|{bcolors.ENDC}{idx_display} {bcolors.OKCYAN}|{bcolors.ENDC}"
+                f" {marker} {title:<31}{bcolors.OKCYAN}|{bcolors.ENDC}"
+            )
 
         print(row)
 
 
-    def print_header(self, header: tuple):
+    def print_header(self, header: List[str]):
+        """
+        Single-column header for Description.
+        """
         tbl = "+--------+------------------------------------+"
-        tblNotes = "+--------+------------------------------------+------------------------------------+------------------------------------+"
-        if len(header) == 2:
-            print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
-            Description, Notes = header
-            print(
-                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Description:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{Notes:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'User':^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
-            )
-            print(f"{bcolors.OKCYAN}{tblNotes}{bcolors.ENDC}")
-        else:
-            print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
-            Description = header
-            print(
-                f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{header[0]:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
-            )
-            print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
+        # header[0] is "Description"
+        print(
+            f"{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{'#':>7} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}{bcolors.HEADER}{header[0]:^35} {bcolors.ENDC}{bcolors.OKCYAN}|{bcolors.ENDC}"
+        )
+        print(f"{bcolors.OKCYAN}{tbl}{bcolors.ENDC}")
 
 
 ################################################
@@ -554,9 +636,52 @@ class SSHLauncher:
         except Exception as e:
             print(f"Error launching SSH client: {e}")
 
-    # Example usage
-    # launcher = SSHLauncher("example.com", "your_username", identity_file="/path/to/your/key.pem")
-    # launcher.launch()
+    @staticmethod
+    def launch_group(host_entries: List[Dict[str, Any]]):
+        """
+        Open multiple SSH connections inside a tmux session, splitting the window into panes.
+        host_entries: list of dicts with keys { 'host': str, 'user': str (optional), 'identity': str (optional) }
+        """
+        if not shutil.which("tmux"):
+            puts(colored.red("tmux not found; cannot open grouped session"))
+            return
+
+        if not host_entries:
+            puts(colored.red("No hosts provided"))
+            return
+
+        # enforce maximum panes
+        if len(host_entries) > 6:
+            puts(colored.yellow("Maximum 6 hosts supported; truncating list"))
+            host_entries = host_entries[:6]
+
+        # session name based on first host + timestamp
+        session_raw = f"{host_entries[0]['host']}-{int(time.time())}"
+        session = re.sub(r"[^A-Za-z0-9_-]+", "-", session_raw)
+
+        # build ssh command strings
+        ssh_cmds = []
+        for he in host_entries:
+            cmd = ["ssh"]
+            identity = he.get("identity") or he.get("certkey")
+            if identity:
+                cmd.extend(["-i", identity])
+            user = he.get("user", os.getlogin())
+            cmd.append(f"{user}@{he['host']}")
+            ssh_cmds.append(" ".join(shlex.quote(p) for p in cmd))
+
+        try:
+            # create detached session with first command
+            subprocess.run(["tmux", "new-session", "-s", session, "-d", ssh_cmds[0]])
+            # create splits for the rest
+            for cmd in ssh_cmds[1:]:
+                subprocess.run(["tmux", "split-window", "-t", session, cmd])
+            # arrange layout to tile evenly
+            subprocess.run(["tmux", "select-layout", "-t", session, "tiled"])
+            # attach session
+            subprocess.run(["tmux", "attach-session", "-t", session])
+        except Exception as e:
+            print(f"Error creating tmux session: {e}")
 
 
 ################################################
