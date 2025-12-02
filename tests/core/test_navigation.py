@@ -109,7 +109,8 @@ class TestConnectionNavigator:
         assert len(navigator.marked_indices) == initial_count  # Should not add more
     
     @patch('sshmenuc.core.launcher.SSHLauncher.launch_group')
-    def test_launch_multiple_hosts(self, mock_launch_group, temp_config_file):
+    @patch('readchar.readkey')
+    def test_launch_multiple_hosts(self, mock_readkey, mock_launch_group, temp_config_file):
         """Test launching multiple hosts."""
         navigator = ConnectionNavigator(temp_config_file)
         node = [
@@ -124,7 +125,8 @@ class TestConnectionNavigator:
         assert len(navigator.marked_indices) == 0  # Should be cleared
     
     @patch('sshmenuc.core.navigation.SSHLauncher')
-    def test_handle_single_selection_host(self, mock_launcher_class, temp_config_file):
+    @patch('readchar.readkey')
+    def test_handle_single_selection_host(self, mock_readkey, mock_launcher_class, temp_config_file):
         """Test handling single selection of a host."""
         navigator = ConnectionNavigator(temp_config_file)
         node = [{"friendly": "test", "host": "test.com", "user": "testuser"}]

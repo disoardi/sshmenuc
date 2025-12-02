@@ -95,9 +95,11 @@ class TestSSHLauncher:
     
     @patch('shutil.which')
     @patch('subprocess.run')
-    def test_launch_without_tmux(self, mock_run, mock_which):
+    @patch('logging.getLogger')
+    def test_launch_without_tmux(self, mock_logger, mock_run, mock_which):
         """Test launching without tmux available."""
         mock_which.return_value = None
+        mock_logger.return_value.level = 30  # WARNING level
         
         launcher = SSHLauncher("test.com", "user")
         launcher.launch()
@@ -125,7 +127,8 @@ class TestSSHLauncher:
     
     @patch('shutil.which')
     @patch('subprocess.run')
-    def test_launch_group_max_hosts(self, mock_run, mock_which):
+    @patch('readchar.readkey')
+    def test_launch_group_max_hosts(self, mock_readkey, mock_run, mock_which):
         """Test launching group with more than 6 hosts."""
         mock_which.return_value = "/usr/bin/tmux"
         
