@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/disoardi/sshmenuc/workflows/CI/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
 [![Tests](https://github.com/disoardi/sshmenuc/workflows/Tests/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ## Overview
@@ -17,7 +17,7 @@ sshmenuc provides an interactive terminal menu to browse, filter and launch SSH 
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.9+
 - Dependencies: readchar, clint, docker
   - These are declared in pyproject.toml for packaging
 

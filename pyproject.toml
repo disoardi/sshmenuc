@@ -12,7 +12,7 @@ license = "GPLv3"
 packages = [{ include = "sshmenuc" }]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 readchar = "^0.7"
 clint = "^0.5.1"
 docker = "^7.1.0"
