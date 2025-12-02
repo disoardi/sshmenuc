@@ -1,7 +1,3 @@
-import pytest
-from sshmenuc import SSHMenuC
-
-def test_config_present(sshmenu):
-    assert sshmenu.config is not None
-    assert sshmenu.config.is_readable()
+# Legacy test file - replaced by modular tests
+# See tests/core/, tests/ui/, tests/utils/ for new test structure
 
