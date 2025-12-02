@@ -1,4 +1,6 @@
 """For execute sshmenuc as a module"""
 
-#from .sshmenuc import main
-#main()
+from .main import main
+
+if __name__ == "__main__":
+    main()
