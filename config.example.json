@@ -1,0 +1,80 @@
+{
+  "targets": [
+    {
+      "Production": [
+        {
+          "friendly": "web-server-01",
+          "host": "web01.example.com",
+          "user": "admin",
+          "certkey": "/path/to/production_key.pem",
+          "connection_type": "ssh"
+        },
+        {
+          "friendly": "db-server-01",
+          "host": "db01.example.com",
+          "user": "dbadmin",
+          "port": 2222,
+          "connection_type": "ssh"
+        },
+        {
+          "friendly": "api-server-01",
+          "host": "api01.example.com",
+          "user": "apiuser",
+          "connection_type": "ssh"
+        }
+      ]
+    },
+    {
+      "Development": [
+        {
+          "friendly": "dev-vm-01",
+          "host": "dev01.local",
+          "user": "developer",
+          "connection_type": "ssh"
+        },
+        {
+          "friendly": "test-vm-01",
+          "host": "test01.local",
+          "user": "tester",
+          "identity_file": "/path/to/test_key",
+          "connection_type": "ssh"
+        }
+      ]
+    },
+    {
+      "Cloud": [
+        {
+          "friendly": "gcp-instance-01",
+          "host": "instance-1",
+          "user": "clouduser",
+          "zone": "us-central1-a",
+          "project": "my-gcp-project",
+          "connection_type": "gssh"
+        },
+        {
+          "friendly": "aws-instance-01",
+          "host": "ec2-123-45-67-89.compute-1.amazonaws.com",
+          "user": "ec2-user",
+          "certkey": "/path/to/aws_key.pem",
+          "connection_type": "ssh"
+        }
+      ]
+    },
+    {
+      "Docker": [
+        {
+          "friendly": "nginx-container",
+          "host": "nginx_web",
+          "command": "docker exec -it",
+          "connection_type": "docker"
+        },
+        {
+          "friendly": "postgres-container",
+          "host": "postgres_db",
+          "command": "docker exec -it",
+          "connection_type": "docker"
+        }
+      ]
+    }
+  ]
+}
