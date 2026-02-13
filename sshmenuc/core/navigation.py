@@ -1,5 +1,5 @@
 """
-Gestione della navigazione nel menu.
+Menu navigation management.
 """
 import os
 import logging
@@ -9,24 +9,47 @@ from clint.textui import puts, colored
 
 from .base import BaseSSHMenuC
 from .launcher import SSHLauncher
+from .config import ConnectionManager
+from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
 
 
+# Constants
+MAX_MARKED_SELECTIONS = 6  # Maximum number of hosts that can be marked for multi-connection
+
+
 class ConnectionNavigator(BaseSSHMenuC):
-    """Gestisce la navigazione nel menu delle connessioni."""
+    """Manages navigation through the connection menu.
+
+    Provides interactive keyboard navigation with support for multiple selection
+    and tmux integration for group connections.
+    """
     
     def __init__(self, config_file: str):
         super().__init__(config_file)
         self.load_config()
         self.marked_indices = set()
         self.display = MenuDisplay()
+        self.config_manager = ConnectionManager(config_file)
+        self.editor = ConfigEditor(self.config_manager)
     
     def validate_config(self) -> bool:
-        """Valida la configurazione per la navigazione."""
+        """Validate the configuration for navigation.
+
+        Returns:
+            True if config is valid dict with 'targets' key, False otherwise
+        """
         return isinstance(self.config_data, dict) and "targets" in self.config_data
     
     def navigate(self):
-        """Loop principale di navigazione."""
+        """Main navigation loop.
+
+        Handles keyboard input for menu navigation:
+        - Arrow keys: Move selection up/down/left/right
+        - Space: Toggle selection for multi-host connection
+        - Enter: Launch connection(s)
+        - q: Quit application
+        """
         current_path = []
         selected_target = 0
         
@@ -51,21 +74,39 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_selection(current_path, selected_target)
             elif key == readchar.key.ENTER:
                 self._handle_enter(current_path, selected_target)
+            elif key == "a":
+                self._handle_add(current_path, selected_target)
+            elif key == "e":
+                self._handle_edit(current_path, selected_target)
+            elif key == "d":
+                self._handle_delete(current_path, selected_target)
+            elif key == "r":
+                self._handle_rename(current_path, selected_target)
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
-        """Gestisce la selezione con spazio."""
+        """Handle selection toggle with space key.
+
+        Args:
+            current_path: Current navigation path
+            selected_target: Currently selected target index
+        """
         node = self.get_node(current_path)
         if isinstance(node, list):
             if selected_target in self.marked_indices:
                 self.marked_indices.remove(selected_target)
             else:
-                if len(self.marked_indices) < 6:
+                if len(self.marked_indices) < MAX_MARKED_SELECTIONS:
                     self.marked_indices.add(selected_target)
                 else:
-                    puts(colored.red("Maximum 6 selections allowed"))
+                    puts(colored.red(f"Maximum {MAX_MARKED_SELECTIONS} selections allowed"))
     
     def _handle_enter(self, current_path: List[Any], selected_target: int):
-        """Gestisce l'invio."""
+        """Handle enter key press.
+
+        Args:
+            current_path: Current navigation path
+            selected_target: Currently selected target index
+        """
         node = self.get_node(current_path)
         
         if isinstance(node, list) and self.marked_indices:
@@ -74,7 +115,11 @@ class ConnectionNavigator(BaseSSHMenuC):
             self._handle_single_selection(node, selected_target, current_path)
     
     def _launch_multiple_hosts(self, node: List[Any]):
-        """Lancia connessioni multiple."""
+        """Launch multiple host connections in tmux split panes.
+
+        Args:
+            node: List of host entries to connect to
+        """
         selected_hosts = []
         for i in sorted(self.marked_indices):
             if 0 <= i < len(node):
@@ -92,7 +137,13 @@ class ConnectionNavigator(BaseSSHMenuC):
             puts(colored.red("No valid hosts selected"))
     
     def _handle_single_selection(self, node: Any, selected_target: int, current_path: List[Any]):
-        """Gestisce selezione singola."""
+        """Handle single selection (no marked hosts).
+
+        Args:
+            node: Current node (dict or list)
+            selected_target: Index of selected item
+            current_path: Current navigation path
+        """
         if isinstance(node, list):
             if "friendly" in node[selected_target]:
                 host = node[selected_target]["host"]
@@ -106,7 +157,14 @@ class ConnectionNavigator(BaseSSHMenuC):
             current_path.append(selected_target)
     
     def get_node(self, path: List[Any]):
-        """Restituisce il nodo corrente nel percorso."""
+        """Return the current node at the given path.
+
+        Args:
+            path: Navigation path as list of indices
+
+        Returns:
+            The node at the specified path (dict, list, or host entry)
+        """
         targets = self.config_data.get("targets", [])
         aggregated: Dict[str, Any] = {}
         for t in targets:
@@ -136,8 +194,27 @@ class ConnectionNavigator(BaseSSHMenuC):
         return cur
     
     def get_previous_node(self, path: List[Any]):
-        """Restituisce il nodo precedente."""
-        node: Union[dict, list] = self.config_data
+        """Return the previous node in the path.
+
+        Args:
+            path: Navigation path as list of indices
+
+        Returns:
+            The node at path[:-1]
+
+        Raises:
+            KeyError: If a key in the path is not found
+            TypeError: If node type is not dict or list
+        """
+        # Aggregate targets like get_node() does
+        targets = self.config_data.get("targets", [])
+        aggregated: Dict[str, Any] = {}
+        for t in targets:
+            if isinstance(t, dict):
+                for k, v in t.items():
+                    aggregated[k] = v
+
+        node: Union[dict, list] = aggregated  # Start from aggregated
         for item in path[:-1]:
             if isinstance(node, dict):
                 keys = list(node.keys())
@@ -155,7 +232,14 @@ class ConnectionNavigator(BaseSSHMenuC):
         return node
     
     def count_elements(self, current_path: List[Any]) -> int:
-        """Conta gli elementi nel nodo corrente."""
+        """Count elements in the current node.
+
+        Args:
+            current_path: Current navigation path
+
+        Returns:
+            Number of items in the current node
+        """
         node = self.get_node(current_path)
         if isinstance(node, dict):
             return len(node)
@@ -165,7 +249,11 @@ class ConnectionNavigator(BaseSSHMenuC):
             return 0
     
     def move_left(self, current_path: List[Any]):
-        """Gestisce il movimento a sinistra."""
+        """Handle left navigation (go back).
+
+        Args:
+            current_path: Current navigation path (modified in place)
+        """
         if current_path:
             if isinstance(self.get_node(current_path), dict):
                 current_path.pop()
@@ -181,7 +269,12 @@ class ConnectionNavigator(BaseSSHMenuC):
                 current_path[-1] -= 1
     
     def print_menu(self, selected_target: int, current_path: List[Any]):
-        """Stampa il menu corrente."""
+        """Print the current menu.
+
+        Args:
+            selected_target: Index of the currently selected item
+            current_path: Current navigation path
+        """
         self.display.clear_screen()
         self.display.print_instructions()
         
@@ -191,6 +284,83 @@ class ConnectionNavigator(BaseSSHMenuC):
         current_node = self.get_node(current_path)
         logging.debug("current_node_type: %s", type(current_node))
         logging.debug("current_node: %s", current_node)
-        
+
         level = len(current_path) if isinstance(current_node, dict) else len(current_path) + 1
         self.display.print_table(current_node, selected_target, self.marked_indices, level)
+
+    def _handle_add(self, current_path: List[Any], selected_target: int):
+        """Handle 'a' key - Add target or connection based on context."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            if self.editor.add_target():
+                self.load_config()
+                input("\nPress Enter to continue...")
+        elif isinstance(node, list) and current_path:
+            targets = self.config_data.get("targets", [])
+            aggregated = {}
+            for t in targets:
+                if isinstance(t, dict):
+                    for k, v in t.items():
+                        aggregated[k] = v
+            target_keys = list(aggregated.keys())
+            if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                target_name = target_keys[current_path[0]]
+                if self.editor.add_connection(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+
+    def _handle_edit(self, current_path: List[Any], selected_target: int):
+        """Handle 'e' key - Edit connection."""
+        node = self.get_node(current_path)
+        if isinstance(node, list) and 0 <= selected_target < len(node):
+            connection = node[selected_target]
+            if isinstance(connection, dict) and "friendly" in connection:
+                targets = self.config_data.get("targets", [])
+                aggregated = {}
+                for t in targets:
+                    if isinstance(t, dict):
+                        for k, v in t.items():
+                            aggregated[k] = v
+                target_keys = list(aggregated.keys())
+                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                    target_name = target_keys[current_path[0]]
+                    if self.editor.edit_connection(target_name, selected_target, connection):
+                        self.load_config()
+                        input("\nPress Enter to continue...")
+
+    def _handle_delete(self, current_path: List[Any], selected_target: int):
+        """Handle 'd' key - Delete target or connection based on context."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            target_keys = list(node.keys())
+            if 0 <= selected_target < len(target_keys):
+                target_name = target_keys[selected_target]
+                if self.editor.delete_target(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+        elif isinstance(node, list) and 0 <= selected_target < len(node):
+            connection = node[selected_target]
+            if isinstance(connection, dict) and "friendly" in connection:
+                targets = self.config_data.get("targets", [])
+                aggregated = {}
+                for t in targets:
+                    if isinstance(t, dict):
+                        for k, v in t.items():
+                            aggregated[k] = v
+                target_keys = list(aggregated.keys())
+                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                    target_name = target_keys[current_path[0]]
+                    if self.editor.delete_connection(target_name, selected_target, connection):
+                        self.load_config()
+                        input("\nPress Enter to continue...")
+
+    def _handle_rename(self, current_path: List[Any], selected_target: int):
+        """Handle 'r' key - Rename target."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            target_keys = list(node.keys())
+            if 0 <= selected_target < len(target_keys):
+                target_name = target_keys[selected_target]
+                if self.editor.rename_target(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
