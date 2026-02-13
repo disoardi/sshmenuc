@@ -221,7 +221,8 @@ class TestSSHLauncher:
 
     @patch('subprocess.run')
     @patch('shutil.which')
-    def test_launch_group_exception_handling(self, mock_which, mock_run):
+    @patch('os.getlogin', return_value='testuser')
+    def test_launch_group_exception_handling(self, mock_getlogin, mock_which, mock_run):
         """Test launch_group handles subprocess exceptions."""
         mock_which.return_value = "/usr/bin/tmux"
         mock_run.side_effect = Exception("Subprocess failed")

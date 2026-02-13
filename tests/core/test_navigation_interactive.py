@@ -129,8 +129,9 @@ class TestNavigationInteractive:
         # Should print error message
         assert mock_puts.called
 
+    @patch('os.getlogin', return_value='testuser')
     @patch('sshmenuc.core.launcher.SSHLauncher.launch_group')
-    def test_launch_multiple_hosts_valid(self, mock_launch_group, temp_config_file):
+    def test_launch_multiple_hosts_valid(self, mock_launch_group, mock_getlogin, temp_config_file):
         """Test launching multiple valid hosts."""
         navigator = ConnectionNavigator(temp_config_file)
         node = [
