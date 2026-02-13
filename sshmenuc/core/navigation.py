@@ -14,6 +14,10 @@ from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
 
 
+# Constants
+MAX_MARKED_SELECTIONS = 6  # Maximum number of hosts that can be marked for multi-connection
+
+
 class ConnectionNavigator(BaseSSHMenuC):
     """Manages navigation through the connection menu.
 
@@ -91,10 +95,10 @@ class ConnectionNavigator(BaseSSHMenuC):
             if selected_target in self.marked_indices:
                 self.marked_indices.remove(selected_target)
             else:
-                if len(self.marked_indices) < 6:
+                if len(self.marked_indices) < MAX_MARKED_SELECTIONS:
                     self.marked_indices.add(selected_target)
                 else:
-                    puts(colored.red("Maximum 6 selections allowed"))
+                    puts(colored.red(f"Maximum {MAX_MARKED_SELECTIONS} selections allowed"))
     
     def _handle_enter(self, current_path: List[Any], selected_target: int):
         """Handle enter key press.

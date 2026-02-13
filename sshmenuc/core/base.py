@@ -5,14 +5,14 @@ Provides shared functionality and common patterns.
 import json
 import os
 import logging
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 from abc import ABC, abstractmethod
 
 
 class BaseSSHMenuC(ABC):
     """Abstract base class with common functionality for all sshmenuc classes."""
-    
-    def __init__(self, config_file: str = None):
+
+    def __init__(self, config_file: Optional[str] = None):
         self.config_file = config_file
         self.config_data: Dict[str, Any] = {"targets": []}
         self._setup_logging()

@@ -13,21 +13,21 @@ class TestMenuDisplay:
         display = MenuDisplay()
         assert display.colors is not None
     
-    @patch('os.system')
-    def test_clear_screen_unix(self, mock_system):
+    @patch('subprocess.run')
+    def test_clear_screen_unix(self, mock_run):
         """Test clear screen on Unix systems."""
         with patch('os.name', 'posix'):
             display = MenuDisplay()
             display.clear_screen()
-            mock_system.assert_called_once_with('clear')
-    
-    @patch('os.system')
-    def test_clear_screen_windows(self, mock_system):
+            mock_run.assert_called_once_with(['clear'], shell=True, check=False)
+
+    @patch('subprocess.run')
+    def test_clear_screen_windows(self, mock_run):
         """Test clear screen on Windows systems."""
         with patch('os.name', 'nt'):
             display = MenuDisplay()
             display.clear_screen()
-            mock_system.assert_called_once_with('cls')
+            mock_run.assert_called_once_with(['cls'], shell=True, check=False)
     
     @patch('builtins.print')
     def test_print_instructions(self, mock_print):

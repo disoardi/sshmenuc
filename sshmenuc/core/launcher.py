@@ -7,10 +7,14 @@ import shlex
 import shutil
 import subprocess
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import readchar
 import logging
 from clint.textui import puts, colored
+
+
+# Constants
+MAX_TMUX_PANES = 6  # Maximum number of tmux panes for group connections
 
 
 class SSHLauncher:
@@ -18,8 +22,8 @@ class SSHLauncher:
 
     Supports both single and group connections with automatic tmux session management.
     """
-    
-    def __init__(self, host: str, username: str, port: int = 22, identity_file: str = None):
+
+    def __init__(self, host: str, username: str, port: int = 22, identity_file: Optional[str] = None):
         self.host = host
         self.username = username
         self.port = port
@@ -53,7 +57,8 @@ class SSHLauncher:
                 if parts:
                     sessions.append(parts[0])
             return sessions
-        except Exception:
+        except (FileNotFoundError, PermissionError, subprocess.SubprocessError) as e:
+            logging.debug(f"Failed to list tmux sessions: {e}")
             return []
     
     def _build_ssh_command(self) -> List[str]:
@@ -157,10 +162,10 @@ class SSHLauncher:
             puts(colored.red("No hosts provided"))
             return
         
-        # Limit to maximum 6 panes
-        if len(host_entries) > 6:
-            puts(colored.yellow("Maximum 6 hosts supported; truncating list"))
-            host_entries = host_entries[:6]
+        # Limit to maximum panes
+        if len(host_entries) > MAX_TMUX_PANES:
+            puts(colored.yellow(f"Maximum {MAX_TMUX_PANES} hosts supported; truncating list"))
+            host_entries = host_entries[:MAX_TMUX_PANES]
         
         # Session name based on first host + timestamp
         session_raw = f"{host_entries[0]['host']}-{int(time.time())}"

@@ -2,6 +2,7 @@
 User interface rendering management.
 """
 import os
+import subprocess
 import logging
 from typing import List, Dict, Any, Union
 from .colors import Colors
@@ -9,19 +10,20 @@ from .colors import Colors
 
 class MenuDisplay:
     """Manages menu display and rendering."""
-    
+
     def __init__(self):
         self.colors = Colors()
-    
-    def clear_screen(self):
+
+    def clear_screen(self) -> None:
         """Clear the terminal screen."""
-        os.system("cls" if os.name == "nt" else "clear")
-    
-    def print_instructions(self):
+        cmd = "cls" if os.name == "nt" else "clear"
+        subprocess.run([cmd], shell=True, check=False)
+
+    def print_instructions(self) -> None:
         """Print usage instructions."""
         print("Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  Quit: q")
-    
-    def print_header(self, headers: List[str]):
+
+    def print_header(self, headers: List[str]) -> None:
         """Print table header.
 
         Args:
@@ -36,7 +38,7 @@ class MenuDisplay:
         )
         print(f"{self.colors.OKCYAN}{tbl}{self.colors.ENDC}")
     
-    def print_row(self, infos: tuple, is_selected: bool, is_host: bool, is_marked: bool = False):
+    def print_row(self, infos: tuple, is_selected: bool, is_host: bool, is_marked: bool = False) -> None:
         """Print a table row.
 
         Args:
@@ -76,12 +78,12 @@ class MenuDisplay:
         
         print(row)
     
-    def print_footer(self):
+    def print_footer(self) -> None:
         """Print table footer."""
         print(f"{self.colors.OKCYAN}+--------+------------------------------------+{self.colors.ENDC}")
-    
-    def print_table(self, data: Union[Dict[str, Any], List[Any]], selected_target: int, 
-                   marked_indices: set, level: int):
+
+    def print_table(self, data: Union[Dict[str, Any], List[Any]], selected_target: int,
+                   marked_indices: set, level: int) -> None:
         """Print complete table with data.
 
         Args:

@@ -11,7 +11,7 @@ class ConnectionManager(BaseSSHMenuC):
     Provides CRUD operations for targets and connections within the configuration.
     """
 
-    def __init__(self, config_file: str = None):
+    def __init__(self, config_file: Optional[str] = None):
         super().__init__(config_file)
         if config_file:
             self.load_config()
