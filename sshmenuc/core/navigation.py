@@ -9,6 +9,8 @@ from clint.textui import puts, colored
 
 from .base import BaseSSHMenuC
 from .launcher import SSHLauncher
+from .config import ConnectionManager
+from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
 
 
@@ -24,6 +26,8 @@ class ConnectionNavigator(BaseSSHMenuC):
         self.load_config()
         self.marked_indices = set()
         self.display = MenuDisplay()
+        self.config_manager = ConnectionManager(config_file)
+        self.editor = ConfigEditor(self.config_manager)
     
     def validate_config(self) -> bool:
         """Validate the configuration for navigation.
@@ -66,6 +70,14 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_selection(current_path, selected_target)
             elif key == readchar.key.ENTER:
                 self._handle_enter(current_path, selected_target)
+            elif key == "a":
+                self._handle_add(current_path, selected_target)
+            elif key == "e":
+                self._handle_edit(current_path, selected_target)
+            elif key == "d":
+                self._handle_delete(current_path, selected_target)
+            elif key == "r":
+                self._handle_rename(current_path, selected_target)
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.
@@ -268,6 +280,83 @@ class ConnectionNavigator(BaseSSHMenuC):
         current_node = self.get_node(current_path)
         logging.debug("current_node_type: %s", type(current_node))
         logging.debug("current_node: %s", current_node)
-        
+
         level = len(current_path) if isinstance(current_node, dict) else len(current_path) + 1
         self.display.print_table(current_node, selected_target, self.marked_indices, level)
+
+    def _handle_add(self, current_path: List[Any], selected_target: int):
+        """Handle 'a' key - Add target or connection based on context."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            if self.editor.add_target():
+                self.load_config()
+                input("\nPress Enter to continue...")
+        elif isinstance(node, list) and current_path:
+            targets = self.config_data.get("targets", [])
+            aggregated = {}
+            for t in targets:
+                if isinstance(t, dict):
+                    for k, v in t.items():
+                        aggregated[k] = v
+            target_keys = list(aggregated.keys())
+            if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                target_name = target_keys[current_path[0]]
+                if self.editor.add_connection(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+
+    def _handle_edit(self, current_path: List[Any], selected_target: int):
+        """Handle 'e' key - Edit connection."""
+        node = self.get_node(current_path)
+        if isinstance(node, list) and 0 <= selected_target < len(node):
+            connection = node[selected_target]
+            if isinstance(connection, dict) and "friendly" in connection:
+                targets = self.config_data.get("targets", [])
+                aggregated = {}
+                for t in targets:
+                    if isinstance(t, dict):
+                        for k, v in t.items():
+                            aggregated[k] = v
+                target_keys = list(aggregated.keys())
+                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                    target_name = target_keys[current_path[0]]
+                    if self.editor.edit_connection(target_name, selected_target, connection):
+                        self.load_config()
+                        input("\nPress Enter to continue...")
+
+    def _handle_delete(self, current_path: List[Any], selected_target: int):
+        """Handle 'd' key - Delete target or connection based on context."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            target_keys = list(node.keys())
+            if 0 <= selected_target < len(target_keys):
+                target_name = target_keys[selected_target]
+                if self.editor.delete_target(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+        elif isinstance(node, list) and 0 <= selected_target < len(node):
+            connection = node[selected_target]
+            if isinstance(connection, dict) and "friendly" in connection:
+                targets = self.config_data.get("targets", [])
+                aggregated = {}
+                for t in targets:
+                    if isinstance(t, dict):
+                        for k, v in t.items():
+                            aggregated[k] = v
+                target_keys = list(aggregated.keys())
+                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
+                    target_name = target_keys[current_path[0]]
+                    if self.editor.delete_connection(target_name, selected_target, connection):
+                        self.load_config()
+                        input("\nPress Enter to continue...")
+
+    def _handle_rename(self, current_path: List[Any], selected_target: int):
+        """Handle 'r' key - Rename target."""
+        node = self.get_node(current_path)
+        if isinstance(node, dict) and not current_path:
+            target_keys = list(node.keys())
+            if 0 <= selected_target < len(target_keys):
+                target_name = target_keys[selected_target]
+                if self.editor.rename_target(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")

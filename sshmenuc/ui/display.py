@@ -19,7 +19,7 @@ class MenuDisplay:
     
     def print_instructions(self):
         """Print usage instructions."""
-        print("Navigate with ↑ ↓  select with SPACE (max 6)  press ENTER to open selected hosts  q to quit")
+        print("Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  Quit: q")
     
     def print_header(self, headers: List[str]):
         """Print table header.

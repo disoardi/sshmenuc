@@ -36,9 +36,13 @@ class TestMenuDisplay:
         display.print_instructions()
         mock_print.assert_called_once()
         args = mock_print.call_args[0][0]
-        assert "Navigate with" in args
+        assert "Navigate:" in args
         assert "SPACE" in args
         assert "ENTER" in args
+        assert "[a]dd" in args
+        assert "[e]dit" in args
+        assert "[d]elete" in args
+        assert "[r]ename" in args
     
     @patch('builtins.print')
     def test_print_header(self, mock_print):
