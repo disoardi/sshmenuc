@@ -1,7 +1,8 @@
 # sshmenuc
 
 [![CI](https://github.com/disoardi/sshmenuc/workflows/CI/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
-[![Tests](https://github.com/disoardi/sshmenuc/workflows/Tests/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
+[![Documentation](https://github.com/disoardi/sshmenuc/workflows/Documentation/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
+[![Coverage](https://codecov.io/gh/disoardi/sshmenuc/branch/main/graph/badge.svg)](https://codecov.io/gh/disoardi/sshmenuc)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -9,11 +10,31 @@
 
 sshmenuc is a complete rewrite of the original sshmenu tool, implemented as an object‑oriented Python application. The project has been redesigned around classes and clear separation of concerns to make the codebase easier to extend, maintain and test.
 
+## Documentation
+
+📚 **Complete documentation is available at: [https://disoardi.github.io/sshmenuc/](https://disoardi.github.io/sshmenuc/)**
+
+- [Installation Guide](https://disoardi.github.io/sshmenuc/installation.html)
+- [Configuration Reference](https://disoardi.github.io/sshmenuc/configuration.html)
+- [Usage Guide](https://disoardi.github.io/sshmenuc/usage.html)
+- [API Documentation](https://disoardi.github.io/sshmenuc/api/core.html)
+- [Contributing](https://disoardi.github.io/sshmenuc/contributing.html)
+
 ## Description
 
 sshmenuc provides an interactive terminal menu to browse, filter and launch SSH (and cloud CLI) connections. It supports nested groups of hosts, per‑host metadata (user, connection type, identity file / certkey) and launching different connection commands (e.g., ssh, gcloud ssh inside Docker).
 
-**Important**: sshmenuc intentionally does NOT store or persist plain‑text passwords. If a password is required, either remember it at runtime or use a secure password manager / SSH keys. Password history or in‑app password storage is not supported by design for security reasons.
+### Key Features
+
+- 🔐 **Interactive configuration editor** - Add, edit, delete, and rename targets and connections directly from the menu
+- 📁 **Nested host groups** - Organize connections hierarchically
+- 🖥️ **Multiple connection support** - Launch up to 6 connections in tmux split panes
+- 🎨 **Colorized terminal UI** - Clear visual feedback and navigation
+- 🔑 **SSH key support** - Per-host identity file configuration
+- 🐳 **Docker/Cloud CLI** - Support for gcloud ssh and other connection types
+- ✅ **Comprehensive testing** - 102 tests ensuring reliability
+
+**Security Note**: sshmenuc intentionally does NOT store or persist plain‑text passwords. If a password is required, either remember it at runtime or use a secure password manager / SSH keys. Password history or in‑app password storage is not supported by design for security reasons.
 
 ## Requirements
 
@@ -27,14 +48,14 @@ sshmenuc provides an interactive terminal menu to browse, filter and launch SSH 
 sshmenuc/
 ├── __init__.py
 ├── __main__.py          # Module entry point
-├── main.py              # Refactored main function
-├── sshmenuc.py          # Original file (to be deprecated)
+├── main.py              # Application entry point
 ├── core/                # Core business logic
 │   ├── __init__.py
 │   ├── base.py          # Common base class BaseSSHMenuC
-│   ├── config.py        # ConnectionManager
-│   ├── navigation.py    # ConnectionNavigator
-│   └── launcher.py      # SSHLauncher
+│   ├── config.py        # ConnectionManager (CRUD operations)
+│   ├── config_editor.py # ConfigEditor (interactive editing)
+│   ├── navigation.py    # ConnectionNavigator (menu & keyboard)
+│   └── launcher.py      # SSHLauncher (tmux & SSH)
 ├── ui/                  # User interface
 │   ├── __init__.py
 │   ├── colors.py        # Color management (Colors)
@@ -70,14 +91,22 @@ Extends `BaseSSHMenuC` for configuration management:
 - Specific validation for configuration structures
 - Methods to create, modify, delete targets and connections
 
-### 2. `ConnectionNavigator` (core/navigation.py)
+### 2. `ConfigEditor` (core/config_editor.py)
+Interactive configuration editor (uses `ConnectionManager`):
+- Form-based target and connection editing
+- Add, edit, delete, rename operations
+- User-friendly prompts and confirmations
+- Integrated keyboard shortcuts (a/e/d/r keys)
+
+### 3. `ConnectionNavigator` (core/navigation.py)
 Extends `BaseSSHMenuC` for menu navigation:
 - Main navigation loop
 - User input handling (arrows, space, enter)
 - Multiple selection with markers
 - Integration with `MenuDisplay` for rendering
+- Integrated `ConfigEditor` for inline editing
 
-### 3. `SSHLauncher` (core/launcher.py)
+### 4. `SSHLauncher` (core/launcher.py)
 Standalone class for connection launching:
 - tmux session management (single and multiple)
 - SSH command construction with parameters
@@ -205,14 +234,35 @@ assert isinstance(config_manager, BaseSSHMenuC)
 assert isinstance(navigator, BaseSSHMenuC)
 ```
 
-### Backward Compatibility
-- Original `sshmenuc.py` file remains for compatibility
-- New entry point is in `main.py`
-- `__main__.py` updated to use new structure
+### Breaking Changes in v1.1.0
+- Original monolithic `sshmenuc.py` has been removed
+- Entry point is now `main.py` with modular structure
+- All functionality maintained through new class-based architecture
+- Configuration format remains compatible
 
 ## Testing
 
-The new structure facilitates testing:
+The project includes comprehensive test coverage:
+
+- **102 tests** across all modules
+- **69% code coverage** (targeting 90%+)
+- **CI/CD integration** with GitHub Actions
+- **Multi-version testing** on Python 3.9, 3.10, 3.11, 3.12
+
+### Running Tests
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=sshmenuc --cov-report=html
+
+# Run specific test file
+poetry run pytest tests/core/test_navigation.py -v
+```
+
+### Test Examples
 
 ```python
 # Base class testing
@@ -254,10 +304,33 @@ Please follow the existing code style and include tests for new functionality wh
 
 This project is licensed under GPLv3. See the LICENSE file for details.
 
-## Next Steps
+## Project Status
 
-1. **Gradually deprecate** original `sshmenuc.py`
-2. **Add comprehensive tests** for each module
-3. **Document** public class APIs
-4. **Consider** Observer pattern for UI events
-5. **Evaluate** dependency injection for greater flexibility
+**Version 1.1.0** - Production Ready ✅
+
+- ✅ Complete modular refactoring with OOP design
+- ✅ Comprehensive test suite (102 tests, 69% coverage)
+- ✅ Full API documentation with Sphinx
+- ✅ CI/CD pipeline with GitHub Actions
+- ✅ Interactive configuration editor
+- ✅ Python 3.9+ support
+
+## Future Enhancements
+
+Potential improvements for future versions:
+
+1. **Observer pattern for UI events**
+   - Decouple UI event handling from business logic
+   - Enable plugin-based event listeners
+
+2. **Dependency injection framework**
+   - Improve testability and flexibility
+   - Enable runtime component swapping
+
+3. **Enhanced features**
+   - SSH connection pooling
+   - Session history and favorites
+   - Advanced filtering and search
+   - Custom key bindings
+
+Contributions and suggestions are welcome!
