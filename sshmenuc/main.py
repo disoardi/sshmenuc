@@ -1,12 +1,16 @@
 """
-Entry point principale per sshmenuc.
+Main entry point for sshmenuc application.
 """
 from .core import ConnectionNavigator
 from .utils import setup_argument_parser, setup_logging
 
 
 def main():
-    """Funzione principale dell'applicazione."""
+    """Main application function.
+
+    Parses command-line arguments, sets up logging,
+    and launches the connection navigator.
+    """
     parser = setup_argument_parser()
     args = parser.parse_args()
     

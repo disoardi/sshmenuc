@@ -1,6 +1,6 @@
 """
-Classe base comune per tutte le classi del progetto sshmenuc.
-Fornisce funzionalità condivise e pattern comuni.
+Common base class for all classes in the sshmenuc project.
+Provides shared functionality and common patterns.
 """
 import json
 import os
@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseSSHMenuC(ABC):
-    """Classe base astratta con funzionalità comuni."""
+    """Abstract base class with common functionality for all sshmenuc classes."""
     
     def __init__(self, config_file: str = None):
         self.config_file = config_file
@@ -18,12 +18,16 @@ class BaseSSHMenuC(ABC):
         self._setup_logging()
         
     def _setup_logging(self):
-        """Setup base del logging."""
+        """Setup basic logging configuration."""
         if not logging.getLogger().handlers:
             logging.basicConfig(level=logging.INFO)
     
     def load_config(self):
-        """Carica e normalizza il file di configurazione."""
+        """Load and normalize the configuration file.
+
+        Handles both new format (with 'targets' key) and legacy format.
+        If the file doesn't exist or is corrupted, creates an empty config.
+        """
         try:
             with open(self.config_file, "r") as f:
                 data = json.load(f)
@@ -42,14 +46,18 @@ class BaseSSHMenuC(ABC):
             self.config_data = {"targets": []}
     
     def _create_config_directory(self):
-        """Crea la directory di configurazione se non esiste."""
+        """Create configuration directory if it doesn't exist."""
         try:
             os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
         except Exception as e:
             logging.warning(f"Could not create config directory: {e}")
     
     def save_config(self):
-        """Salva la configurazione su file."""
+        """Save configuration to file.
+
+        Raises:
+            OSError: If file cannot be written (permission denied, disk full, etc.)
+        """
         try:
             with open(self.config_file, "w") as file:
                 json.dump(self.config_data, file, indent=4)
@@ -57,15 +65,27 @@ class BaseSSHMenuC(ABC):
             logging.error(f"Error saving config: {e}")
     
     def get_config(self) -> Dict[str, Any]:
-        """Restituisce la configurazione corrente."""
+        """Return the current configuration.
+
+        Returns:
+            Configuration dictionary with 'targets' key
+        """
         return self.config_data
     
     def set_config(self, config_data: Dict[str, Any]):
-        """Imposta una nuova configurazione."""
+        """Set a new configuration.
+
+        Args:
+            config_data: New configuration dictionary to set
+        """
         self.config_data = config_data
     
     def has_global_hosts(self) -> bool:
-        """Verifica se esistono host nella configurazione."""
+        """Check if there are any hosts in the configuration.
+
+        Returns:
+            True if at least one host entry exists, False otherwise
+        """
         targets = self.config_data.get("targets", [])
         for t in targets:
             if isinstance(t, dict):
@@ -78,5 +98,11 @@ class BaseSSHMenuC(ABC):
     
     @abstractmethod
     def validate_config(self) -> bool:
-        """Metodo astratto per validare la configurazione."""
+        """Abstract method to validate the configuration.
+
+        Must be implemented by subclasses to provide specific validation logic.
+
+        Returns:
+            True if configuration is valid, False otherwise
+        """
         pass

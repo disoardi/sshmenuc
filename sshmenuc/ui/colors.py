@@ -1,10 +1,10 @@
 """
-Definizioni dei colori per l'interfaccia utente.
+Color definitions for the user interface.
 """
 
 
 class Colors:
-    """Classe per la gestione dei colori del terminale."""
+    """Terminal color management class with ANSI escape sequences."""
     
     HEADER = "\033[95m"
     OKBLUE = "\033[94m"
@@ -18,7 +18,15 @@ class Colors:
     
     @classmethod
     def colorize(cls, text: str, color: str) -> str:
-        """Applica un colore al testo."""
+        """Apply a color to text.
+
+        Args:
+            text: Text to colorize
+            color: ANSI color code
+
+        Returns:
+            Colored text string
+        """
         return f"{color}{text}{cls.ENDC}"
     
     @classmethod
