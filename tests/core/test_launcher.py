@@ -137,6 +137,109 @@ class TestSSHLauncher:
         
         hosts = [{"host": f"host{i}.com", "user": "user"} for i in range(8)]
         SSHLauncher.launch_group(hosts)
-        
+
         # Should be called 4 times: new-session + 5 split-window + select-layout + attach-session
         assert mock_run.call_count == 8
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('readchar.readkey')
+    @patch('logging.getLogger')
+    def test_launch_with_tmux_debug_logging(self, mock_logger, mock_readkey, mock_which, mock_run):
+        """Test launch in debug mode with tmux."""
+        mock_which.return_value = '/usr/bin/tmux'
+        mock_run.return_value = MagicMock(returncode=1)  # No existing sessions
+        mock_readkey.return_value = '\n'
+        mock_logger.return_value.level = 10  # DEBUG level
+
+        launcher = SSHLauncher("host.com", "user")
+        launcher.launch()
+
+        # Should call readkey in debug mode
+        mock_readkey.assert_called_once()
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('builtins.input')
+    def test_handle_existing_sessions_multiple_select(self, mock_input, mock_which, mock_run):
+        """Test handling multiple existing sessions with selection."""
+        mock_which.return_value = '/usr/bin/tmux'
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="host-123: 1 windows\nhost-456: 1 windows\n"
+        )
+        mock_input.return_value = "0"  # Select first session
+
+        launcher = SSHLauncher("host", "user")
+        result = launcher._handle_existing_sessions("host")
+
+        assert result is True
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('builtins.input')
+    def test_handle_existing_sessions_multiple_new(self, mock_input, mock_which, mock_run):
+        """Test handling multiple existing sessions - create new."""
+        mock_which.return_value = '/usr/bin/tmux'
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="host-123: 1 windows\nhost-456: 1 windows\n"
+        )
+        mock_input.return_value = ""  # Press enter to create new
+
+        launcher = SSHLauncher("host", "user")
+        result = launcher._handle_existing_sessions("host")
+
+        assert result is False
+
+    @patch('subprocess.run')
+    def test_list_tmux_sessions_exception(self, mock_run):
+        """Test _list_tmux_sessions handles exceptions."""
+        mock_run.side_effect = FileNotFoundError("tmux not found")
+
+        launcher = SSHLauncher("test.com", "user")
+        sessions = launcher._list_tmux_sessions()
+
+        assert sessions == []
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('os.getlogin')
+    def test_launch_group_with_identity(self, mock_getlogin, mock_which, mock_run):
+        """Test launch_group with identity files."""
+        mock_which.return_value = "/usr/bin/tmux"
+        mock_getlogin.return_value = "testuser"
+
+        hosts = [
+            {"host": "host1.com", "user": "user1", "identity": "/path/to/key1"},
+            {"host": "host2.com", "user": "user2", "certkey": "/path/to/key2"}
+        ]
+        SSHLauncher.launch_group(hosts)
+
+        # Should be called: new-session + split-window + select-layout + attach-session
+        assert mock_run.call_count == 4
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    def test_launch_group_exception_handling(self, mock_which, mock_run):
+        """Test launch_group handles subprocess exceptions."""
+        mock_which.return_value = "/usr/bin/tmux"
+        mock_run.side_effect = Exception("Subprocess failed")
+
+        hosts = [{"host": "host1.com", "user": "user1"}]
+
+        with patch('builtins.print') as mock_print:
+            SSHLauncher.launch_group(hosts)
+            # Should print error message
+            mock_print.assert_called()
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('builtins.input', return_value='n')
+    def test_handle_existing_sessions_single_decline(self, mock_input, mock_which, mock_run):
+        """Test handling single existing session - decline attach."""
+        launcher = SSHLauncher("test.com", "user")
+        launcher._list_tmux_sessions = MagicMock(return_value=["test-com-123"])
+
+        result = launcher._handle_existing_sessions("test-com")
+        assert result is False
