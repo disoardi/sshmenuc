@@ -1,5 +1,7 @@
 # sshmenuc
 
+[![PyPI version](https://badge.fury.io/py/sshmenuc.svg)](https://pypi.org/project/sshmenuc/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/sshmenuc.svg)](https://pypi.org/project/sshmenuc/)
 [![CI](https://github.com/disoardi/sshmenuc/workflows/CI/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
 [![Documentation](https://github.com/disoardi/sshmenuc/workflows/Documentation/badge.svg)](https://github.com/disoardi/sshmenuc/actions)
 [![Coverage](https://codecov.io/gh/disoardi/sshmenuc/branch/main/graph/badge.svg)](https://codecov.io/gh/disoardi/sshmenuc)
@@ -134,29 +136,40 @@ Standalone class for connection launching:
 - Host entry validation
 - Generic support functions
 
-## Installation & Usage
+## Installation
 
-### Install (buildable pip package)
+### Install from PyPI (Recommended)
 
-1. Ensure packaging config is present (pyproject.toml). Dependencies are declared there.
+The easiest way to install sshmenuc is directly from PyPI:
 
-2. Install build tooling:
 ```bash
-python -m pip install --upgrade build twine
+pip install sshmenuc
 ```
 
-3. Build distributions:
+Or to install a specific version:
+
 ```bash
-python -m build
+pip install sshmenuc==1.1.0
 ```
 
-4. Install locally:
-```bash
-# Install built wheel
-python -m pip install dist/sshmenuc-<version>-py3-none-any.whl
+### Install from Source (Development)
 
-# Or install in editable mode for development
-python -m pip install -e .
+For development or to install from source:
+
+1. Clone the repository:
+```bash
+git clone https://github.com/disoardi/sshmenuc.git
+cd sshmenuc
+```
+
+2. Install with Poetry:
+```bash
+poetry install
+```
+
+3. Or install in editable mode with pip:
+```bash
+pip install -e .
 ```
 
 ### Development with Poetry
@@ -308,6 +321,7 @@ This project is licensed under GPLv3. See the LICENSE file for details.
 
 **Version 1.1.0** - Production Ready ✅
 
+- ✅ **Available on PyPI**: `pip install sshmenuc`
 - ✅ Complete modular refactoring with OOP design
 - ✅ Comprehensive test suite (102 tests, 69% coverage)
 - ✅ Full API documentation with Sphinx
