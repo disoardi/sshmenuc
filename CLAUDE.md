@@ -135,6 +135,47 @@ main "$@"
   - Verify tests pass: `CI=true TERM=dumb poetry run pytest`
 - **Docker testing**: Verify tests pass in Docker containers (simulates GitHub Actions)
 
+### Docker/Container Compatibility
+- **Never use system functions without fallback** in production code
+- Functions that require TTY/interactive environment:
+  - `os.getlogin()` - Add fallback to env vars and getpass
+  - `input()` - May not work in non-interactive containers
+  - `readchar.readkey()` - Requires TTY
+  - Terminal size detection - Check availability first
+
+**Standard fallback pattern**:
+```python
+def get_current_user() -> str:
+    """Get username with Docker/container fallback."""
+    try:
+        return os.getlogin()
+    except (OSError, AttributeError):
+        pass
+
+    # Environment variables
+    user = os.getenv('USER') or os.getenv('USERNAME')
+    if user:
+        return user
+
+    # Getpass module
+    try:
+        return getpass.getuser()
+    except Exception:
+        pass
+
+    # Final safe default
+    return 'user'
+```
+
+**Docker testing commands**:
+```bash
+# With TTY (interactive)
+docker run --rm -it python:3.12 bash -c "pip install <package> && <command>"
+
+# Without TTY (verify no-TTY compatibility)
+docker run --rm python:3.12 bash -c "pip install <package> && <command>"
+```
+
 ### GitHub CLI Authentication
 - **For public projects on github.com**, authenticate gh CLI separately:
   ```bash
@@ -200,6 +241,38 @@ main "$@"
    - GitHub Release created (check releases page)
    - PyPI/npm package published (if configured)
    - Documentation deployed (if applicable)
+
+### PyPI Publishing Pre-Flight
+
+Before publishing to PyPI:
+
+1. **Validate metadata format**:
+   ```bash
+   # Check for common issues
+   grep -E "authors.*\.\@" pyproject.toml && echo "❌ Invalid email format" || echo "✅ Email OK"
+   ```
+
+2. **Build and validate package**:
+   ```bash
+   poetry build
+   pip install twine
+   twine check dist/*
+   ```
+
+3. **Test on TestPyPI** (recommended for first release):
+   ```bash
+   poetry config repositories.testpypi https://test.pypi.org/legacy/
+   poetry publish -r testpypi
+   pip install --index-url https://test.pypi.org/simple/ <package>
+   ```
+
+4. **Verify required secrets configured**:
+   - `PYPI_TOKEN` for production PyPI
+   - `TEST_PYPI_TOKEN` for TestPyPI (optional)
+
+5. **Check workflow triggers**:
+   - Verify `publish-pypi.yml` trigger conditions
+   - Test manual trigger: `gh workflow run publish-pypi.yml`
 
 ### Post-Release Verification
 
