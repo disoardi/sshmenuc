@@ -7,7 +7,7 @@ name = "sshmenuc"
 version = "1.1.0"
 description = "Command line SSH menu and helper utility with cluster support (OO rewrite)."
 readme = "README.md"
-authors = ["Davide Isoardi <davide.@isoardi.info>"]
+authors = ["Davide Isoardi <davide@isoardi.info>"]
 license = "GPLv3"
 packages = [{ include = "sshmenuc" }]
 
