@@ -12,6 +12,7 @@ from .launcher import SSHLauncher
 from .config import ConnectionManager
 from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
+from ..utils.helpers import get_current_user
 
 
 # Constants
@@ -126,7 +127,7 @@ class ConnectionNavigator(BaseSSHMenuC):
                 item = node[i]
                 if isinstance(item, dict) and ("host" in item or "friendly" in item):
                     host = item.get("host", item.get("friendly"))
-                    user = item.get("user", os.getlogin())
+                    user = item.get("user", get_current_user())
                     ident = item.get("certkey", item.get("identity_file", None))
                     selected_hosts.append({"host": host, "user": user, "identity": ident})
         
@@ -147,7 +148,7 @@ class ConnectionNavigator(BaseSSHMenuC):
         if isinstance(node, list):
             if "friendly" in node[selected_target]:
                 host = node[selected_target]["host"]
-                user = node[selected_target].get("user", os.getlogin())
+                user = node[selected_target].get("user", get_current_user())
                 identity = node[selected_target].get("certkey")
                 launcher = SSHLauncher(host, user, 22, identity)
                 launcher.launch()

@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'sshmenuc'
 copyright = '2024, Davide Isoardi'
 author = 'Davide Isoardi'
-release = '1.1.0'
+release = '1.1.1'
 
 # General configuration
 extensions = [

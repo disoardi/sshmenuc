@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-02-16
+
+### Fixed
+- **Docker/Container compatibility**: Fixed `OSError` when running in Docker or no-TTY environments
+  - Added `get_current_user()` helper function with multiple fallback methods
+  - Replaced all `os.getlogin()` calls with `get_current_user()` (navigation.py, launcher.py)
+  - Fallback chain: `os.getlogin()` → `os.getenv('USER')` → `getpass.getuser()` → `'user'`
+- **PyPI metadata**: Corrected author email format (removed invalid period before @)
+
+### Changed
+- Enhanced error handling for username detection in containerized environments
+- Improved cross-platform compatibility for user detection
+
 ## [1.1.0] - 2026-02-13
 
 ### Added

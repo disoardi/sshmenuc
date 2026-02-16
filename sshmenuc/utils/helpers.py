@@ -2,6 +2,7 @@
 Common utility functions.
 """
 import argparse
+import getpass
 import os
 import sys
 import logging
@@ -57,6 +58,40 @@ def get_default_config_path() -> str:
     return os.path.expanduser("~/.config/sshmenuc/config.json")
 
 
+def get_current_user() -> str:
+    """Get current username with fallback for Docker/containerized environments.
+
+    Tries multiple methods to get the current username:
+    1. os.getlogin() - works in normal TTY environments
+    2. os.getenv('USER') - fallback for containers
+    3. getpass.getuser() - additional fallback
+    4. 'user' - final fallback if all else fails
+
+    Returns:
+        Current username string
+    """
+    try:
+        return os.getlogin()
+    except (OSError, AttributeError):
+        # OSError: happens in Docker/no-TTY environments
+        # AttributeError: happens on some systems without getlogin
+        pass
+
+    # Try environment variable
+    user = os.getenv('USER') or os.getenv('USERNAME')
+    if user:
+        return user
+
+    # Try getpass module
+    try:
+        return getpass.getuser()
+    except Exception:
+        pass
+
+    # Final fallback
+    return 'user'
+
+
 def validate_host_entry(entry: dict) -> bool:
     """Validate a host entry.
 
@@ -68,10 +103,10 @@ def validate_host_entry(entry: dict) -> bool:
     """
     required_fields = ["host"]
     optional_fields = ["friendly", "user", "port", "identity_file", "certkey"]
-    
+
     if not isinstance(entry, dict):
         return False
-    
+
     # Check required fields
     for field in required_fields:
         if field not in entry:
@@ -82,5 +117,5 @@ def validate_host_entry(entry: dict) -> bool:
     for key in entry.keys():
         if key not in all_fields:
             return False
-    
+
     return True

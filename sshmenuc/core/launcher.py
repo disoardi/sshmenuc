@@ -12,6 +12,8 @@ import readchar
 import logging
 from clint.textui import puts, colored
 
+from ..utils.helpers import get_current_user
+
 
 # Constants
 MAX_TMUX_PANES = 6  # Maximum number of tmux panes for group connections
@@ -178,7 +180,7 @@ class SSHLauncher:
             identity = he.get("identity") or he.get("certkey")
             if identity:
                 cmd.extend(["-i", identity])
-            user = he.get("user", os.getlogin())
+            user = he.get("user", get_current_user())
             cmd.append(f"{user}@{he['host']}")
             ssh_cmds.append(" ".join(shlex.quote(p) for p in cmd))
         
