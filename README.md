@@ -34,7 +34,7 @@ sshmenuc provides an interactive terminal menu to browse, filter and launch SSH 
 - 🎨 **Colorized terminal UI** - Clear visual feedback and navigation
 - 🔑 **SSH key support** - Per-host identity file configuration
 - 🐳 **Docker/Cloud CLI** - Support for gcloud ssh and other connection types
-- ✅ **Comprehensive testing** - 102 tests ensuring reliability
+- ✅ **Comprehensive testing** - 108 tests ensuring reliability
 
 **Security Note**: sshmenuc intentionally does NOT store or persist plain‑text passwords. If a password is required, either remember it at runtime or use a secure password manager / SSH keys. Password history or in‑app password storage is not supported by design for security reasons.
 
@@ -200,6 +200,76 @@ python sshmenuc/main.py
 # With arguments
 python -m sshmenuc -c /path/to/config.json -l debug
 ```
+
+## Configuration Reference
+
+The configuration file (`~/.config/sshmenuc/config.json`) uses the following structure:
+
+```json
+{
+  "targets": [
+    {
+      "Group Name": [
+        { <host entry> },
+        { <host entry> }
+      ]
+    }
+  ]
+}
+```
+
+### Host Entry Fields
+
+| Campo | Tipo | Default | Descrizione |
+|---|---|---|---|
+| `friendly` | string | **required** | Nome visualizzato nel menu |
+| `host` | string | **required** | Hostname, IP o nome container |
+| `user` | string | current user | Username per la connessione |
+| `port` | integer | `22` | Porta SSH |
+| `certkey` | string | — | Path alla chiave privata SSH (es. `~/.ssh/id_rsa`) |
+| `extra_args` | string | — | Argomenti SSH aggiuntivi (es. `"-t bash"`, `"-o StrictHostKeyChecking=no"`) |
+| `connection_type` | string | `ssh` | Tipo connessione: `ssh`, `gssh` (Google Cloud), `docker` |
+| `zone` | string | — | Zona cloud (solo `gssh`) |
+| `project` | string | — | Progetto cloud (solo `gssh`) |
+| `command` | string | — | Comando custom (solo `docker`, es. `"docker exec -it"`) |
+
+### Esempi
+
+```json
+{
+  "targets": [
+    {
+      "Production": [
+        {
+          "friendly": "web-01",
+          "host": "web01.example.com",
+          "user": "admin",
+          "port": 22,
+          "certkey": "~/.ssh/prod_key"
+        },
+        {
+          "friendly": "jump-host",
+          "host": "jump.example.com",
+          "user": "admin",
+          "extra_args": "-t bash"
+        }
+      ]
+    },
+    {
+      "Docker": [
+        {
+          "friendly": "nginx",
+          "host": "nginx_container",
+          "command": "docker exec -it",
+          "connection_type": "docker"
+        }
+      ]
+    }
+  ]
+}
+```
+
+> **Tip**: usa `sshmenuc -c /path/to/config.json` per specificare un file di configurazione alternativo.
 
 ## Refactoring Benefits
 

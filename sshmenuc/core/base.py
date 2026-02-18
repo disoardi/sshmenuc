@@ -4,6 +4,7 @@ Provides shared functionality and common patterns.
 """
 import json
 import os
+import shlex
 import logging
 from typing import Dict, Any, List, Union, Optional
 from abc import ABC, abstractmethod
@@ -44,7 +45,38 @@ class BaseSSHMenuC(ABC):
         except json.JSONDecodeError:
             logging.error(f"Error decoding JSON in '{self.config_file}'. Using empty configuration.")
             self.config_data = {"targets": []}
+        else:
+            self._validate_host_entries()
     
+    def _validate_host_entries(self):
+        """Validate host entry fields and log warnings for invalid values.
+
+        Checks extra_args (shlex parseable) and port (integer 1-65535).
+        Does not abort loading; only warns to allow partial use of valid entries.
+        """
+        for target in self.config_data.get("targets", []):
+            if not isinstance(target, dict):
+                continue
+            for entries in target.values():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    friendly = entry.get("friendly", entry.get("host", "unknown"))
+
+                    extra_args = entry.get("extra_args")
+                    if extra_args is not None:
+                        try:
+                            shlex.split(extra_args)
+                        except ValueError as e:
+                            logging.warning(f"[{friendly}] Invalid extra_args '{extra_args}': {e}")
+
+                    port = entry.get("port")
+                    if port is not None:
+                        if not isinstance(port, int) or not (1 <= port <= 65535):
+                            logging.warning(f"[{friendly}] Invalid port '{port}': must be integer 1-65535")
+
     def _create_config_directory(self):
         """Create configuration directory if it doesn't exist."""
         try:
