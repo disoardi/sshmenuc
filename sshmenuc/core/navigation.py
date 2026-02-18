@@ -129,7 +129,8 @@ class ConnectionNavigator(BaseSSHMenuC):
                     host = item.get("host", item.get("friendly"))
                     user = item.get("user", get_current_user())
                     ident = item.get("certkey", item.get("identity_file", None))
-                    selected_hosts.append({"host": host, "user": user, "identity": ident})
+                    extra_args = item.get("extra_args")
+                    selected_hosts.append({"host": host, "user": user, "identity": ident, "extra_args": extra_args})
         
         if selected_hosts:
             SSHLauncher.launch_group(selected_hosts)
@@ -150,7 +151,9 @@ class ConnectionNavigator(BaseSSHMenuC):
                 host = node[selected_target]["host"]
                 user = node[selected_target].get("user", get_current_user())
                 identity = node[selected_target].get("certkey")
-                launcher = SSHLauncher(host, user, 22, identity)
+                port = node[selected_target].get("port", 22)
+                extra_args = node[selected_target].get("extra_args")
+                launcher = SSHLauncher(host, user, port, identity, extra_args)
                 launcher.launch()
             else:
                 current_path.extend([selected_target, 0])

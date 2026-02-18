@@ -70,8 +70,32 @@ class TestSSHLauncher:
         """Test building SSH command with identity file."""
         launcher = SSHLauncher("test.com", "user", 22, "/path/to/key")
         cmd = launcher._build_ssh_command()
-        
+
         expected = ["ssh", "-i", "/path/to/key", "user@test.com", "-p", "22"]
+        assert cmd == expected
+
+    def test_build_ssh_command_with_custom_port(self):
+        """Test building SSH command with custom port."""
+        launcher = SSHLauncher("test.com", "user", 2222)
+        cmd = launcher._build_ssh_command()
+
+        expected = ["ssh", "user@test.com", "-p", "2222"]
+        assert cmd == expected
+
+    def test_build_ssh_command_with_extra_args(self):
+        """Test building SSH command with extra arguments."""
+        launcher = SSHLauncher("test.com", "user", 22, None, "-t bash")
+        cmd = launcher._build_ssh_command()
+
+        expected = ["ssh", "user@test.com", "-p", "22", "-t", "bash"]
+        assert cmd == expected
+
+    def test_build_ssh_command_with_extra_args_multiple(self):
+        """Test building SSH command with multiple extra arguments."""
+        launcher = SSHLauncher("test.com", "user", 22, "/key", "-t bash -o StrictHostKeyChecking=no")
+        cmd = launcher._build_ssh_command()
+
+        expected = ["ssh", "-i", "/key", "user@test.com", "-p", "22", "-t", "bash", "-o", "StrictHostKeyChecking=no"]
         assert cmd == expected
     
     @patch('subprocess.run')
@@ -201,6 +225,25 @@ class TestSSHLauncher:
         sessions = launcher._list_tmux_sessions()
 
         assert sessions == []
+
+    @patch('subprocess.run')
+    @patch('shutil.which')
+    @patch('os.getlogin')
+    def test_launch_group_with_extra_args(self, mock_getlogin, mock_which, mock_run):
+        """Test launch_group with extra_args in host entry."""
+        mock_which.return_value = "/usr/bin/tmux"
+        mock_getlogin.return_value = "testuser"
+
+        hosts = [
+            {"host": "host1.com", "user": "user1", "extra_args": "-t bash"},
+            {"host": "host2.com", "user": "user2"},
+        ]
+        SSHLauncher.launch_group(hosts)
+
+        # Verify the first command contains -t bash
+        first_call_args = mock_run.call_args_list[0][0][0]
+        cmd_str = " ".join(first_call_args)
+        assert "-t" in cmd_str and "bash" in cmd_str
 
     @patch('subprocess.run')
     @patch('shutil.which')

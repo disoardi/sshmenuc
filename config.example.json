@@ -17,6 +17,13 @@
           "connection_type": "ssh"
         },
         {
+          "friendly": "jump-host-01",
+          "host": "jump01.example.com",
+          "user": "admin",
+          "extra_args": "-t bash",
+          "connection_type": "ssh"
+        },
+        {
           "friendly": "api-server-01",
           "host": "api01.example.com",
           "user": "apiuser",

@@ -137,6 +137,30 @@ class TestConnectionNavigator:
         
         mock_launcher_class.assert_called_once()
     
+    @patch('sshmenuc.core.navigation.SSHLauncher')
+    @patch('os.getlogin')
+    def test_handle_single_selection_custom_port(self, mock_getlogin, mock_launcher_class, temp_config_file):
+        """Test that custom port is read from config and passed to SSHLauncher."""
+        mock_getlogin.return_value = "testuser"
+        navigator = ConnectionNavigator(temp_config_file)
+        node = [{"friendly": "test", "host": "test.com", "user": "testuser", "port": 2222}]
+
+        navigator._handle_single_selection(node, 0, [0])
+
+        mock_launcher_class.assert_called_once_with("test.com", "testuser", 2222, None, None)
+
+    @patch('sshmenuc.core.navigation.SSHLauncher')
+    @patch('os.getlogin')
+    def test_handle_single_selection_extra_args(self, mock_getlogin, mock_launcher_class, temp_config_file):
+        """Test that extra_args is read from config and passed to SSHLauncher."""
+        mock_getlogin.return_value = "testuser"
+        navigator = ConnectionNavigator(temp_config_file)
+        node = [{"friendly": "test", "host": "test.com", "user": "testuser", "extra_args": "-t bash"}]
+
+        navigator._handle_single_selection(node, 0, [0])
+
+        mock_launcher_class.assert_called_once_with("test.com", "testuser", 22, None, "-t bash")
+
     def test_handle_single_selection_category(self, temp_config_file):
         """Test handling single selection of a category."""
         navigator = ConnectionNavigator(temp_config_file)

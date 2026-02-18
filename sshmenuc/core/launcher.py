@@ -25,11 +25,12 @@ class SSHLauncher:
     Supports both single and group connections with automatic tmux session management.
     """
 
-    def __init__(self, host: str, username: str, port: int = 22, identity_file: Optional[str] = None):
+    def __init__(self, host: str, username: str, port: int = 22, identity_file: Optional[str] = None, extra_args: Optional[str] = None):
         self.host = host
         self.username = username
         self.port = port
         self.identity_file = identity_file
+        self.extra_args = extra_args
     
     def _sanitize_session_name(self, raw: str) -> str:
         """Sanitize tmux session name by removing invalid characters.
@@ -73,6 +74,8 @@ class SSHLauncher:
         if self.identity_file:
             ssh_command.extend(["-i", self.identity_file])
         ssh_command.extend([f"{self.username}@{self.host}", "-p", str(self.port)])
+        if self.extra_args:
+            ssh_command.extend(shlex.split(self.extra_args))
         return ssh_command
     
     def _handle_existing_sessions(self, sanitized_host: str) -> bool:
@@ -182,6 +185,9 @@ class SSHLauncher:
                 cmd.extend(["-i", identity])
             user = he.get("user", get_current_user())
             cmd.append(f"{user}@{he['host']}")
+            extra_args = he.get("extra_args")
+            if extra_args:
+                cmd.extend(shlex.split(extra_args))
             ssh_cmds.append(" ".join(shlex.quote(p) for p in cmd))
         
         try:
