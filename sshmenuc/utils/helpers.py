@@ -40,6 +40,15 @@ def setup_argument_parser() -> argparse.ArgumentParser:
              "If omitted and multiple contexts exist, a selection menu is shown.",
         default=None,
     )
+    parser.add_argument(
+        "--add-context",
+        metavar="NAME",
+        dest="add_context",
+        help="Interactively create a new context (profile) in contexts.json "
+             "and configure its remote sync settings. Existing config.json is "
+             "imported automatically if present.",
+        default=None,
+    )
     return parser
 
 

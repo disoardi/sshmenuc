@@ -8,6 +8,107 @@ from .core import ConnectionNavigator
 from .utils import setup_argument_parser, setup_logging
 
 
+def _add_context_wizard(name: str, args) -> None:
+    """Interactive wizard to create a new context and configure its sync.
+
+    Collects remote sync parameters, registers the context in contexts.json,
+    optionally imports an existing legacy config.json, and offers an immediate
+    first encrypted push to the remote repo.
+
+    Args:
+        name: The context name to create (e.g. 'personal', 'isp').
+        args: Parsed CLI arguments (provides args.config for legacy import).
+    """
+    import getpass as _getpass
+    import json as _json
+
+    from .contexts import ContextManager
+    from .sync.crypto import encrypt_config
+    from .sync.git_remote import ensure_repo_initialized, push_remote
+    from .sync.passphrase_cache import set_passphrase
+
+    print(f"\n=== Nuovo contesto: '{name}' ===")
+    print("Configura la sincronizzazione remota per questo contesto.")
+    print("Il config verrà cifrato con AES-256-GCM prima di ogni push.")
+    print("Premi Invio senza digitare per annullare.\n")
+
+    remote_url = input("URL repo remoto (es. git@github.com:utente/repo.git): ").strip()
+    if not remote_url:
+        print("Wizard annullato.")
+        return
+
+    branch = input("Branch [main]: ").strip() or "main"
+
+    default_remote_file = f"{name}.enc"
+    remote_file = input(f"Nome file nel repo [{default_remote_file}]: ").strip() or default_remote_file
+
+    default_repo_path = os.path.expanduser("~/.config/sshmenuc/sync_repos/sshmenuc_config")
+    repo_path_input = input(f"Percorso repo locale [{default_repo_path}]: ").strip()
+    sync_repo_path = repo_path_input or default_repo_path
+
+    cfg = {
+        "remote_url": remote_url,
+        "branch": branch,
+        "remote_file": remote_file,
+        "sync_repo_path": sync_repo_path,
+        "auto_pull": True,
+        "auto_push": True,
+    }
+
+    ctx_mgr = ContextManager()
+    ctx_mgr.add_context(name, cfg)
+    ctx_mgr.ensure_context_dir(name)
+    print(f"\n✓ Contesto '{name}' aggiunto a contexts.json")
+
+    # Import legacy config if cache is missing but default config exists
+    config_file = ctx_mgr.get_config_file(name)
+    if not os.path.isfile(config_file) and os.path.isfile(args.config):
+        shutil.copy2(args.config, config_file)
+        print(f"  Config importato da {args.config}")
+
+    # Offer immediate first push
+    answer = input("\nEseguire subito la prima sincronizzazione (push)? [s/N]: ").strip().lower()
+    if answer != "s":
+        print(f"\nContesto '{name}' creato. Avvialo con: sshmenuc --context {name}")
+        return
+
+    if not os.path.isfile(config_file):
+        print("[SYNC] Nessun config locale da cifrare.")
+        print(f"Avvia sshmenuc --context {name}, aggiungi host, poi la sync avverrà automaticamente.")
+        return
+
+    passphrase = _getpass.getpass("Scegli una passphrase per cifrare il config: ")
+    passphrase2 = _getpass.getpass("Conferma passphrase: ")
+    if passphrase != passphrase2:
+        print("Le passphrase non coincidono. Push annullato.")
+        print(f"Contesto '{name}' salvato - riprova avviando sshmenuc --context {name}.")
+        return
+
+    set_passphrase(passphrase)
+
+    if not ensure_repo_initialized(cfg):
+        print("[SYNC] Impossibile raggiungere il repo remoto. Verifica URL e chiave SSH.")
+        print(f"Contesto '{name}' salvato - riprova avviando sshmenuc --context {name}.")
+        return
+
+    with open(config_file, "r") as f:
+        config_data = _json.load(f)
+
+    print("Cifratura e push in corso...")
+    enc_bytes = encrypt_config(config_data, passphrase)
+
+    enc_path = config_file + ".enc"
+    with open(enc_path, "wb") as f:
+        f.write(enc_bytes)
+
+    if push_remote(cfg, enc_bytes):
+        print(f"[SYNC] Push completato. Contesto '{name}' pronto.")
+        print(f"Avvialo con: sshmenuc --context {name}")
+    else:
+        print("[SYNC] Push fallito. Backup locale cifrato creato.")
+        print(f"Riprova avviando sshmenuc --context {name}.")
+
+
 def _select_context(ctx_mgr) -> str:
     """Interactive context selection menu.
 
@@ -58,6 +159,11 @@ def main():
         from .sync import SyncManager
         sm = SyncManager(args.config)
         sm.export_config(args.export)
+        return
+
+    # Add-context wizard: create a new named profile interactively, then exit
+    if args.add_context is not None:
+        _add_context_wizard(args.add_context, args)
         return
 
     # Multi-context mode: check for contexts.json registry
