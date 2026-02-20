@@ -13,6 +13,7 @@ from .config import ConnectionManager
 from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
 from ..utils.helpers import get_current_user
+from ..sync import SyncManager, SyncState
 
 
 # Constants
@@ -25,7 +26,7 @@ class ConnectionNavigator(BaseSSHMenuC):
     Provides interactive keyboard navigation with support for multiple selection
     and tmux integration for group connections.
     """
-    
+
     def __init__(self, config_file: str):
         super().__init__(config_file)
         self.load_config()
@@ -33,6 +34,22 @@ class ConnectionNavigator(BaseSSHMenuC):
         self.display = MenuDisplay()
         self.config_manager = ConnectionManager(config_file)
         self.editor = ConfigEditor(self.config_manager)
+        # Sync setup: install post-save hook and run startup pull
+        self.sync_manager = SyncManager(config_file)
+        self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+        self._run_startup_pull()
+
+    def _run_startup_pull(self) -> None:
+        """Pull config from remote at startup and show sync status."""
+        state = self.sync_manager.startup_pull()
+        if state == SyncState.SYNC_OK:
+            # Remote config may have updated the file: reload from disk
+            self.load_config()
+            self.config_manager.load_config()
+        elif state == SyncState.SYNC_OFFLINE:
+            puts(colored.yellow("[SYNC] Remote non raggiungibile - uso backup locale criptato"))
+        elif state == SyncState.LOCAL_ONLY:
+            puts(colored.red("[SYNC] Remote non raggiungibile e nessun backup locale trovato"))
     
     def validate_config(self) -> bool:
         """Validate the configuration for navigation.
@@ -83,6 +100,8 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_delete(current_path, selected_target)
             elif key == "r":
                 self._handle_rename(current_path, selected_target)
+            elif key == "s":
+                self._handle_sync_status()
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.
@@ -280,8 +299,8 @@ class ConnectionNavigator(BaseSSHMenuC):
             current_path: Current navigation path
         """
         self.display.clear_screen()
-        self.display.print_instructions()
-        
+        self.display.print_instructions(sync_label=self.sync_manager.get_status_label())
+
         logging.debug("selected_target: %d", selected_target)
         logging.debug("current_path: %s", current_path)
         
@@ -368,3 +387,36 @@ class ConnectionNavigator(BaseSSHMenuC):
                 if self.editor.rename_target(target_name):
                     self.load_config()
                     input("\nPress Enter to continue...")
+
+    def _handle_sync_status(self) -> None:
+        """Handle 's' key - Show sync status panel and allow manual sync."""
+        state = self.sync_manager.get_state()
+        label = self.sync_manager.get_status_label()
+        cfg = self.sync_manager._sync_cfg
+
+        puts(colored.cyan("\n=== Sync Status ==="))
+        puts(colored.white(f"Stato: {label or 'NO SYNC'}"))
+
+        remote_url = cfg.get("remote_url", "")
+        if remote_url:
+            # Mask credentials in URL for display
+            display_url = remote_url.split("@")[-1] if "@" in remote_url else remote_url
+            puts(colored.white(f"Remote: {display_url}"))
+        else:
+            puts(colored.yellow("Remote: non configurato (crea ~/.config/sshmenuc/sync.json)"))
+
+        last_sync = cfg.get("last_sync", "mai")
+        puts(colored.white(f"Ultimo sync: {last_sync}"))
+
+        if state != SyncState.NO_SYNC and remote_url:
+            puts(colored.white("\n[m] Sync manuale  [Invio] Chiudi"))
+            choice = input("> ").strip().lower()
+            if choice == "m":
+                puts(colored.yellow("Sync in corso..."))
+                self.sync_manager.startup_pull()
+                self.load_config()
+                self.config_manager.load_config()
+                puts(colored.green("Sync completato."))
+                input("\nPress Enter to continue...")
+        else:
+            input("\nPress Enter to continue...")

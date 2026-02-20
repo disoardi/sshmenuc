@@ -1,0 +1,246 @@
+"""Tests for sshmenuc.sync.sync_manager - SyncManager orchestration."""
+
+import json
+import os
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
+
+import sshmenuc.sync.passphrase_cache as cache
+from sshmenuc.sync.git_remote import PullResult, PullStatus
+from sshmenuc.sync.sync_manager import SyncManager, SyncState
+
+SAMPLE_CONFIG = {"targets": [{"Prod": [{"friendly": "web", "host": "web.local"}]}]}
+PASSPHRASE = "test-passphrase"
+
+SYNC_CFG = {
+    "version": 1,
+    "remote_url": "git@github.com:user/sshmenuc-config.git",
+    "branch": "main",
+    "sync_repo_path": "/tmp/test-sync-repo",
+    "auto_push": True,
+    "auto_pull": True,
+    "last_config_hash": "",
+}
+
+
+@pytest.fixture(autouse=True)
+def reset_passphrase():
+    """Reset passphrase cache before each test."""
+    cache.clear()
+    yield
+    cache.clear()
+
+
+@pytest.fixture
+def config_file(tmp_path):
+    """Create a temp config.json with sample data."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+    return str(cfg)
+
+
+@pytest.fixture
+def sync_cfg_file(tmp_path):
+    """Create a temp sync.json."""
+    s = tmp_path / "sync.json"
+    s.write_text(json.dumps(SYNC_CFG, indent=4))
+    return str(s)
+
+
+@pytest.fixture
+def manager(config_file, sync_cfg_file):
+    return SyncManager(config_file, sync_cfg_path=sync_cfg_file)
+
+
+# Patch constructor keyword arg name to match implementation
+@pytest.fixture
+def make_manager(tmp_path):
+    def _make(config_data=None, sync_cfg=None):
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(config_data or SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(sync_cfg or {}, indent=4))
+        return SyncManager(str(cfg), sync_config_path=str(s))
+    return _make
+
+
+class TestSyncManagerInit:
+    def test_initial_state_is_no_sync(self, make_manager):
+        m = make_manager()
+        assert m.get_state() == SyncState.NO_SYNC
+
+    def test_status_label_no_sync(self, make_manager):
+        m = make_manager()
+        assert m.get_status_label() == ""
+
+
+class TestStartupPull:
+    def test_returns_no_sync_without_remote_url(self, make_manager):
+        m = make_manager(sync_cfg={})
+        state = m.startup_pull()
+        assert state == SyncState.NO_SYNC
+
+    def test_returns_no_sync_with_empty_remote_url(self, make_manager):
+        m = make_manager(sync_cfg={"remote_url": ""})
+        state = m.startup_pull()
+        assert state == SyncState.NO_SYNC
+
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=False)
+    def test_returns_offline_when_enc_backup_exists(self, mock_reach, mock_pass, make_manager):
+        m = make_manager(sync_cfg=SYNC_CFG)
+        # Create a fake .enc backup
+        open(m._enc_path, "wb").close()
+        state = m.startup_pull()
+        assert state == SyncState.SYNC_OFFLINE
+
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=False)
+    def test_returns_local_only_when_no_enc_backup(self, mock_reach, mock_pass, make_manager):
+        m = make_manager(sync_cfg=SYNC_CFG)
+        # Ensure no .enc file exists
+        if os.path.exists(m._enc_path):
+            os.remove(m._enc_path)
+        state = m.startup_pull()
+        assert state == SyncState.LOCAL_ONLY
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    def test_returns_sync_ok_on_no_change(self, mock_pass, mock_reach, mock_ensure, mock_pull, make_manager):
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        m = make_manager(sync_cfg=SYNC_CFG)
+        state = m.startup_pull()
+        assert state == SyncState.SYNC_OK
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    def test_overwrites_local_when_unchanged_and_remote_differs(
+        self, mock_pass, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        import hashlib
+        from sshmenuc.sync.crypto import encrypt_config
+
+        # Compute the real hash of the local config
+        local_data = SAMPLE_CONFIG
+        local_text = json.dumps(local_data, indent=4).encode()
+        real_hash = hashlib.sha256(local_text).hexdigest()
+
+        # Build sync.json with last_config_hash matching current config
+        sync_cfg = {**SYNC_CFG, "last_config_hash": real_hash}
+
+        # Write config and sync files
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_text(json.dumps(local_data, indent=4))
+        s_file = tmp_path / "sync.json"
+        s_file.write_text(json.dumps(sync_cfg, indent=4))
+
+        # Setup remote pull result
+        remote_data = {"targets": [{"Dev": [{"host": "dev.local"}]}]}
+        remote_enc = encrypt_config(remote_data, PASSPHRASE)
+        mock_pull.return_value = PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc)
+
+        m = SyncManager(str(cfg_file), sync_config_path=str(s_file))
+        state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OK
+        with open(str(cfg_file), "r") as f:
+            written = json.load(f)
+        assert written == remote_data
+
+
+class TestPostSavePush:
+    def test_does_nothing_on_no_sync(self, make_manager):
+        m = make_manager(sync_cfg={})
+        m.startup_pull()  # sets NO_SYNC
+        m.post_save_push()  # should not raise
+        assert m.get_state() == SyncState.NO_SYNC
+
+    @patch("sshmenuc.sync.sync_manager.push_remote", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.has_passphrase", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    def test_updates_state_to_ok_on_push_success(
+        self, mock_pull, mock_ensure, mock_reach, mock_prompt, mock_has, mock_push, make_manager
+    ):
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        m = make_manager(sync_cfg=SYNC_CFG)
+        m.startup_pull()
+        m.post_save_push()
+        assert m.get_state() == SyncState.SYNC_OK
+
+    @patch("sshmenuc.sync.sync_manager.push_remote", return_value=False)
+    @patch("sshmenuc.sync.sync_manager.has_passphrase", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    def test_updates_state_to_offline_on_push_failure(
+        self, mock_pull, mock_ensure, mock_reach, mock_prompt, mock_has, mock_push, make_manager
+    ):
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        m = make_manager(sync_cfg=SYNC_CFG)
+        m.startup_pull()
+        m.post_save_push()
+        assert m.get_state() == SyncState.SYNC_OFFLINE
+
+
+class TestExportConfig:
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    def test_export_to_file(self, mock_pass, make_manager, tmp_path):
+        from sshmenuc.sync.crypto import encrypt_config
+        m = make_manager(sync_cfg=SYNC_CFG)
+        enc = encrypt_config(SAMPLE_CONFIG, PASSPHRASE)
+        with open(m._enc_path, "wb") as f:
+            f.write(enc)
+
+        output_path = str(tmp_path / "exported.json")
+        m.export_config(output_path)
+
+        with open(output_path, "r") as f:
+            exported = json.load(f)
+        assert exported == SAMPLE_CONFIG
+
+    @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
+    def test_export_to_stdout(self, mock_pass, make_manager, tmp_path, capsys):
+        from sshmenuc.sync.crypto import encrypt_config
+        m = make_manager(sync_cfg=SYNC_CFG)
+        enc = encrypt_config(SAMPLE_CONFIG, PASSPHRASE)
+        with open(m._enc_path, "wb") as f:
+            f.write(enc)
+
+        m.export_config("-")
+        captured = capsys.readouterr()
+        exported = json.loads(captured.out)
+        assert exported == SAMPLE_CONFIG
+
+    def test_export_missing_enc_prints_error(self, make_manager, tmp_path, capsys):
+        m = make_manager(sync_cfg=SYNC_CFG)
+        if os.path.exists(m._enc_path):
+            os.remove(m._enc_path)
+        m.export_config(str(tmp_path / "out.json"))
+        captured = capsys.readouterr()
+        assert "Nessun backup" in captured.err
+
+
+class TestStatusLabel:
+    def test_label_sync_ok(self, make_manager):
+        m = make_manager()
+        m._state = SyncState.SYNC_OK
+        assert m.get_status_label() == "SYNC:OK"
+
+    def test_label_offline(self, make_manager):
+        m = make_manager()
+        m._state = SyncState.SYNC_OFFLINE
+        assert m.get_status_label() == "SYNC:OFFLINE"
+
+    def test_label_local_only(self, make_manager):
+        m = make_manager()
+        m._state = SyncState.LOCAL_ONLY
+        assert m.get_status_label() == "SYNC:NO-BACKUP"

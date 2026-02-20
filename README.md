@@ -34,15 +34,69 @@ sshmenuc provides an interactive terminal menu to browse, filter and launch SSH 
 - 🎨 **Colorized terminal UI** - Clear visual feedback and navigation
 - 🔑 **SSH key support** - Per-host identity file configuration
 - 🐳 **Docker/Cloud CLI** - Support for gcloud ssh and other connection types
-- ✅ **Comprehensive testing** - 108 tests ensuring reliability
+- ✅ **Comprehensive testing** - 162 tests ensuring reliability
+- ☁️ **Remote config sync** - Sync encrypted config via a private Git repo (AES-256-GCM)
 
 **Security Note**: sshmenuc intentionally does NOT store or persist plain‑text passwords. If a password is required, either remember it at runtime or use a secure password manager / SSH keys. Password history or in‑app password storage is not supported by design for security reasons.
 
 ## Requirements
 
 - Python 3.9+
-- Dependencies: readchar, clint, docker
+- Dependencies: readchar, clint, docker, cryptography
   - These are declared in pyproject.toml for packaging
+
+## Remote Config Sync
+
+Sync your SSH config across multiple machines using a private Git repository.
+The config is encrypted with **AES-256-GCM + Scrypt** before being stored in the repo.
+
+### Setup
+
+1. Create a **private** Git repository (GitHub, GitLab, Gitea, self-hosted)
+2. Copy `sync.json.example` to `~/.config/sshmenuc/sync.json` and edit it:
+
+```json
+{
+    "version": 1,
+    "remote_url": "git@github.com:your-user/your-sshmenuc-config.git",
+    "branch": "main",
+    "sync_repo_path": "~/.config/sshmenuc/sync_repo",
+    "auto_pull": true,
+    "auto_push": true
+}
+```
+
+3. On first launch, you will be asked for a **passphrase**. Use the same passphrase on all machines.
+
+### Behavior
+
+| Condition | Result |
+|-----------|--------|
+| Remote reachable | Pull on startup, push after every save |
+| Remote unreachable, local backup exists | `SYNC:OFFLINE` warning, uses backup |
+| Remote unreachable, no backup | `SYNC:NO-BACKUP` warning, normal operation |
+| No `sync.json` | Normal operation, no sync |
+
+### Export Config (Plaintext)
+
+To decrypt and export the config in plaintext:
+
+```bash
+sshmenuc --export /path/to/output.json   # Export to file
+sshmenuc --export -                       # Print to stdout
+```
+
+### Menu Integration
+
+- **`[s]` key**: Show sync status panel and trigger manual sync
+- **Header label**: Sync state shown at the end of the instruction bar (`SYNC:OK`, `SYNC:OFFLINE`, etc.)
+
+### Security Notes
+
+- The plaintext `config.json` is **never** stored in the remote repo
+- Only the encrypted `config.json.enc` is pushed
+- A local encrypted backup (`~/.config/sshmenuc/config.json.enc`) is maintained for offline use
+- The passphrase is kept in memory only (never written to disk)
 
 ## New Modular Structure
 

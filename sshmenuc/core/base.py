@@ -93,8 +93,19 @@ class BaseSSHMenuC(ABC):
         try:
             with open(self.config_file, "w") as file:
                 json.dump(self.config_data, file, indent=4)
+            self._on_config_saved()
         except Exception as e:
             logging.error(f"Error saving config: {e}")
+
+    def _on_config_saved(self):
+        """Post-save hook called after config is successfully written to disk.
+
+        Override or assign _post_save_hook to react to config changes
+        (e.g. trigger remote sync). No-op by default.
+        """
+        hook = getattr(self, "_post_save_hook", None)
+        if hook and callable(hook):
+            hook()
     
     def get_config(self) -> Dict[str, Any]:
         """Return the current configuration.

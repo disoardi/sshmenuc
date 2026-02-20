@@ -143,3 +143,9 @@ sshmenuc/__pycache__
 .pytest_cache
 config_isp.json
 config_isp.json
+
+# Sync configuration (personal, contains remote URL and last-sync metadata)
+sync.json
+
+# Local encrypted config backup (generated at runtime)
+config.json.enc

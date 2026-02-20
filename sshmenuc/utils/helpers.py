@@ -27,6 +27,12 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         help="Severity of log level: debug, info (default), warning, error and critical",
         default="default",
     )
+    parser.add_argument(
+        "--export",
+        metavar="FILE",
+        help="Decrypt local encrypted backup and export config in plaintext. Use '-' for stdout.",
+        default=None,
+    )
     return parser
 
 
@@ -90,6 +96,27 @@ def get_current_user() -> str:
 
     # Final fallback
     return 'user'
+
+
+def get_sync_config_path() -> str:
+    """Return the default path for the sync configuration file.
+
+    Returns:
+        Default sync config file path in user's home directory
+    """
+    return os.path.expanduser("~/.config/sshmenuc/sync.json")
+
+
+def get_enc_path(config_path: str) -> str:
+    """Return the path for the local encrypted backup of a config file.
+
+    Args:
+        config_path: Path to the plaintext config file.
+
+    Returns:
+        Path with .enc suffix (e.g. ~/.config/sshmenuc/config.json.enc)
+    """
+    return config_path + ".enc"
 
 
 def validate_host_entry(entry: dict) -> bool:

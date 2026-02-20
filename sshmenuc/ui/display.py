@@ -19,9 +19,16 @@ class MenuDisplay:
         cmd = "cls" if os.name == "nt" else "clear"
         subprocess.run([cmd], shell=True, check=False)
 
-    def print_instructions(self) -> None:
-        """Print usage instructions."""
-        print("Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  Quit: q")
+    def print_instructions(self, sync_label: str = "") -> None:
+        """Print usage instructions.
+
+        Args:
+            sync_label: Optional sync status label shown at the end of the line.
+        """
+        line = "Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  [s]ync  |  Quit: q"
+        if sync_label:
+            line += f"  [{sync_label}]"
+        print(line)
 
     def print_header(self, headers: List[str]) -> None:
         """Print table header.

@@ -13,9 +13,16 @@ def main():
     """
     parser = setup_argument_parser()
     args = parser.parse_args()
-    
+
     setup_logging(args.loglevel)
-    
+
+    # Export mode: decrypt and materialize config in plaintext, then exit
+    if args.export is not None:
+        from .sync import SyncManager
+        sm = SyncManager(args.config)
+        sm.export_config(args.export)
+        return
+
     navigator = ConnectionNavigator(args.config)
     navigator.navigate()
 

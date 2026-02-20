@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - feature/config-remote-sync
+
+### Added
+- **Remote Config Sync**: Manage SSH config via a private Git repository
+  - AES-256-GCM encryption with Scrypt key derivation (passphrase-based)
+  - Automatic pull on startup, push after every config save
+  - Local encrypted backup (`config.json.enc`) always kept in sync - works offline
+  - Conflict detection with diff display and interactive resolution (L/R/Abort)
+  - `[s]` key in menu to view sync status and trigger manual sync
+  - Sync status label displayed in menu header (`SYNC:OK`, `SYNC:OFFLINE`, etc.)
+- **Export command** (`--export FILE`): Decrypt and materialize config in plaintext
+  - Use `sshmenuc --export /path/to/output.json` to export to file
+  - Use `sshmenuc --export -` to print to stdout
+- **Offline resilience**: If remote Git is unreachable, app uses local encrypted backup transparently with visible warning
+
+### Configuration
+- Add `~/.config/sshmenuc/sync.json` to enable sync (see `sync.json.example`)
+- Without `sync.json`, the app runs normally without sync (no changes to existing behavior)
+
+### Dependencies
+- Added `cryptography >= 42.0` for AES-256-GCM encryption
+
 ## [1.1.1] - 2026-02-16
 
 ### Fixed
