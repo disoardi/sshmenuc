@@ -356,3 +356,95 @@ class TestSetupWizard:
 
         assert result is True
         assert m.get_state() == SyncState.SYNC_OFFLINE
+
+
+class TestSyncMetaCallback:
+    """Verify that _sync_meta_callback is invoked in override mode."""
+
+    def _make_override_manager(self, tmp_path, sync_cfg_override):
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        return SyncManager(str(cfg), sync_cfg_override=sync_cfg_override)
+
+    def test_callback_called_after_successful_pull(self, tmp_path):
+        """_sync_meta_callback receives (timestamp, hash) after a successful startup_pull."""
+        from sshmenuc.sync.crypto import encrypt_config
+        import hashlib
+
+        # Set last_config_hash matching local config so no conflict
+        local_bytes = json.dumps(SAMPLE_CONFIG, indent=4).encode()
+        real_hash = hashlib.sha256(local_bytes).hexdigest()
+        override = {**SYNC_CFG, "last_config_hash": real_hash}
+
+        remote_data = {"targets": [{"Dev": [{"host": "dev.local"}]}]}
+        remote_enc = encrypt_config(remote_data, PASSPHRASE)
+
+        callback_calls = []
+
+        m = self._make_override_manager(tmp_path, override)
+        m._sync_meta_callback = lambda ts, h: callback_calls.append((ts, h))
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE), \
+             patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.pull_remote",
+                   return_value=MagicMock(status=PullStatus.OK, remote_enc_bytes=remote_enc)):
+            m.startup_pull()
+
+        assert len(callback_calls) == 1, "Callback should be called exactly once"
+        ts, h = callback_calls[0]
+        assert isinstance(ts, str) and "T" in ts   # ISO timestamp
+        assert isinstance(h, str) and len(h) == 64  # SHA-256 hex
+
+    def test_callback_not_called_in_normal_mode(self, tmp_path):
+        """In non-override (single-file) mode, callback is never invoked."""
+        import hashlib
+
+        local_bytes = json.dumps(SAMPLE_CONFIG, indent=4).encode()
+        real_hash = hashlib.sha256(local_bytes).hexdigest()
+        sync_cfg = {**SYNC_CFG, "last_config_hash": real_hash}
+
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(sync_cfg, indent=4))
+        m = SyncManager(str(cfg), sync_config_path=str(s))
+
+        callback_calls = []
+        m._sync_meta_callback = lambda ts, h: callback_calls.append((ts, h))
+
+        from sshmenuc.sync.crypto import encrypt_config
+        remote_data = {"targets": [{"Dev": [{"host": "dev.local"}]}]}
+        remote_enc = encrypt_config(remote_data, PASSPHRASE)
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE), \
+             patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.pull_remote",
+                   return_value=MagicMock(status=PullStatus.OK, remote_enc_bytes=remote_enc)):
+            m.startup_pull()
+
+        assert callback_calls == [], "Callback must NOT be called in single-file mode"
+
+    def test_no_false_conflict_when_last_hash_empty(self, tmp_path):
+        """First launch with empty last_config_hash must NOT trigger a conflict dialog."""
+        from sshmenuc.sync.crypto import encrypt_config
+
+        # last_config_hash is "" (first run / never synced)
+        override = {**SYNC_CFG, "last_config_hash": ""}
+        # Remote has the same content as local
+        remote_enc = encrypt_config(SAMPLE_CONFIG, PASSPHRASE)
+
+        conflict_called = []
+        m = self._make_override_manager(tmp_path, override)
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE), \
+             patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.pull_remote",
+                   return_value=MagicMock(status=PullStatus.OK, remote_enc_bytes=remote_enc)), \
+             patch.object(m, "_resolve_conflict",
+                          side_effect=lambda *a: conflict_called.append(True) or "abort"):
+            m.startup_pull()
+
+        assert conflict_called == [], "No conflict dialog expected on first launch"

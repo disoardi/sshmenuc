@@ -51,6 +51,11 @@ class SyncManager:
         # If a config dict is injected (multi-context mode), bypass disk reads.
         self._sync_cfg_override = sync_cfg_override
 
+        # Optional callback(last_sync: str, last_hash: str) invoked after each
+        # successful sync meta update in override mode.  Set by ConnectionNavigator
+        # to persist metadata back to contexts.json via ContextManager.
+        self._sync_meta_callback = None
+
         self._state = SyncState.NO_SYNC
         self._sync_cfg: dict = {}
 
@@ -105,8 +110,9 @@ class SyncManager:
         local_hash = self._hash_config_file()
         last_hash = self._sync_cfg.get("last_config_hash", "")
 
-        if local_hash == last_hash:
-            # Local unchanged since last sync -> safe to overwrite with remote
+        if last_hash == "" or local_hash == last_hash:
+            # First sync (no baseline hash) or local unchanged since last sync:
+            # safe to overwrite with remote content.
             self._write_config(remote_data)
             self._update_local_enc_backup()
             self._save_sync_meta(local_hash=self._hash_config_file(), status="ok")
@@ -315,10 +321,17 @@ class SyncManager:
         metadata via ContextManager; we only update the in-memory dict here.
         """
         self._sync_cfg["last_config_hash"] = local_hash
-        self._sync_cfg["last_sync"] = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
+        self._sync_cfg["last_sync"] = now
         self._sync_cfg["last_sync_status"] = status
         if self._sync_cfg_override is not None:
-            return  # Metadata persistence handled by ContextManager
+            # Persist metadata via the injected callback (set by ConnectionNavigator)
+            if callable(self._sync_meta_callback):
+                try:
+                    self._sync_meta_callback(now, local_hash)
+                except Exception as e:
+                    logging.warning(f"[SYNC] Cannot persist sync metadata: {e}")
+            return
         try:
             with open(self._sync_config_path, "w") as f:
                 json.dump(self._sync_cfg, f, indent=4)

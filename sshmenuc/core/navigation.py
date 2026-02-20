@@ -41,6 +41,12 @@ class ConnectionNavigator(BaseSSHMenuC):
         # Sync setup: install post-save hook and run startup pull
         self.sync_manager = SyncManager(config_file, sync_cfg_override=sync_cfg_override)
         self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+        # In multi-context mode, wire the metadata callback so SyncManager can
+        # persist last_sync/last_config_hash to contexts.json via ContextManager.
+        if context_manager is not None and active_context:
+            self.sync_manager._sync_meta_callback = lambda ts, h: context_manager.update_context_meta(
+                active_context, ts, h
+            )
         self._run_startup_pull()
 
     def _run_startup_pull(self) -> None:

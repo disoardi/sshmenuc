@@ -20,7 +20,9 @@ def _add_context_wizard(name: str, args) -> None:
         args: Parsed CLI arguments (provides args.config for legacy import).
     """
     import getpass as _getpass
+    import hashlib as _hashlib
     import json as _json
+    from datetime import datetime, timezone
 
     from .contexts import ContextManager
     from .sync.crypto import encrypt_config
@@ -102,6 +104,10 @@ def _add_context_wizard(name: str, args) -> None:
         f.write(enc_bytes)
 
     if push_remote(cfg, enc_bytes):
+        # Persist sync metadata so startup_pull won't see a false conflict
+        with open(config_file, "rb") as f:
+            file_hash = _hashlib.sha256(f.read()).hexdigest()
+        ctx_mgr.update_context_meta(name, datetime.now(timezone.utc).isoformat(), file_hash)
         print(f"[SYNC] Push completato. Contesto '{name}' pronto.")
         print(f"Avvialo con: sshmenuc --context {name}")
     else:
