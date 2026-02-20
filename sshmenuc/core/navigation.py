@@ -48,19 +48,62 @@ class ConnectionNavigator(BaseSSHMenuC):
                 active_context, ts, h
             )
         self._run_startup_pull()
+        self._wire_encrypted_io()
 
     def _run_startup_pull(self) -> None:
         """Pull config from remote at startup and show sync status."""
         state = self.sync_manager.startup_pull()
-        if state == SyncState.SYNC_OK:
-            # Remote config may have updated the file: reload from disk
+        data = self.sync_manager.get_config_data()
+        if data is not None:
+            # Zero-plaintext mode: config is in memory, set directly without file I/O
+            self.set_config(data)
+            self.config_manager.set_config(data)
+        elif state == SyncState.SYNC_OK:
+            # Backward compat: no in-memory data (e.g. first run, no .enc yet)
             self.load_config()
             self.config_manager.load_config()
-        elif state == SyncState.SYNC_OFFLINE:
+        if state == SyncState.SYNC_OFFLINE:
             puts(colored.yellow("[SYNC] Remote non raggiungibile - uso backup locale criptato"))
         elif state == SyncState.LOCAL_ONLY:
             puts(colored.red("[SYNC] Remote non raggiungibile e nessun backup locale trovato"))
     
+    def _wire_encrypted_io(self) -> None:
+        """Install encrypted I/O hooks when sync is configured (zero-plaintext mode).
+
+        After this, load_config() and save_config() on both the navigator and the
+        config_manager bypass the plaintext file and work entirely through
+        SyncManager's in-memory config backed by the .enc file.
+
+        Also removes any stale plaintext config file once in-memory data is verified.
+        """
+        if not self.sync_manager._sync_cfg.get("remote_url"):
+            return  # No sync configured: keep using plaintext file (backward compat)
+
+        sync_mgr = self.sync_manager
+
+        def _enc_load():
+            return sync_mgr.get_config_data()
+
+        def _enc_save(data: dict) -> None:
+            # Store in SyncManager memory; post_save_push() will encrypt to .enc
+            sync_mgr._config_data = data
+
+        self._encrypted_load = _enc_load
+        self._encrypted_save = _enc_save
+        self.config_manager._encrypted_load = _enc_load
+        self.config_manager._encrypted_save = _enc_save
+
+        # Remove stale plaintext file now that we have verified in-memory data.
+        # Only deletes if we actually loaded from .enc (get_config_data() is not None).
+        if (sync_mgr.get_config_data() is not None
+                and self.config_file
+                and os.path.isfile(self.config_file)):
+            try:
+                os.unlink(self.config_file)
+                logging.debug("[SYNC] Plaintext config removed: %s", self.config_file)
+            except OSError as e:
+                logging.warning("[SYNC] Cannot remove plaintext config: %s", e)
+
     def validate_config(self) -> bool:
         """Validate the configuration for navigation.
 
@@ -506,8 +549,15 @@ class ConnectionNavigator(BaseSSHMenuC):
             self.config_manager = ConnectionManager(new_config_file)
             self.editor = ConfigEditor(self.config_manager)
             self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
-            self.load_config()
-            self.config_manager.load_config()
+            # Re-wire encrypted I/O for the new context
+            self._wire_encrypted_io()
+            data = self.sync_manager.get_config_data()
+            if data is not None:
+                self.set_config(data)
+                self.config_manager.set_config(data)
+            else:
+                self.load_config()
+                self.config_manager.load_config()
             puts(colored.green(f"[CTX] Contesto cambiato: {prev_context} → {new_name}"))
         else:
             puts(colored.red(f"[CTX] Impossibile caricare il contesto '{new_name}' - fallback su '{self._active_context}'"))

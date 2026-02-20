@@ -149,6 +149,45 @@ def _select_context(ctx_mgr) -> str:
             return active
 
 
+def _migrate_legacy_config(args) -> bool:
+    """Offer to convert an existing plaintext config.json to a named context.
+
+    Called when sshmenuc detects a plaintext config.json at the default path
+    and no contexts.json registry exists. The user can convert it interactively
+    or keep using it as-is (backward compat).
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Returns:
+        True if the user chose to convert (app should exit after wizard), False otherwise.
+    """
+    default_path = os.path.expanduser("~/.config/sshmenuc/config.json")
+    enc_path = default_path + ".enc"
+
+    # Only prompt if: using default config path, plaintext exists, no .enc yet
+    if args.config != default_path:
+        return False
+    if not os.path.isfile(default_path):
+        return False
+    if os.path.isfile(enc_path):
+        return False  # Already encrypted; zero-plaintext mode active
+
+    print("\n=== File di configurazione in chiaro trovato ===")
+    print(f"  {default_path}")
+    print("\nPer proteggere i tuoi host SSH puoi convertirlo in un contesto cifrato.")
+    print("Il file in chiaro verrà cifrato con AES-256-GCM e sincronizzato via Git.")
+    print("In alternativa, continua a usarlo in chiaro (modalità legacy).\n")
+
+    answer = input("Convertire in contesto cifrato? [s/N]: ").strip().lower()
+    if answer != "s":
+        return False
+
+    name = input("Nome per il nuovo contesto [default]: ").strip() or "default"
+    _add_context_wizard(name, args)
+    return True
+
+
 def main():
     """Main application function.
 
@@ -204,7 +243,9 @@ def main():
             active_context=active_name,
         )
     else:
-        # Single-file mode (backward compatible)
+        # Single-file mode: offer migration to encrypted context on first run
+        if _migrate_legacy_config(args):
+            return  # User started the wizard; exit and let them restart
         navigator = ConnectionNavigator(args.config)
 
     navigator.navigate()

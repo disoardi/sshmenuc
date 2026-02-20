@@ -119,13 +119,13 @@ class TestStartupPull:
     @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
     @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
     @patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE)
-    def test_overwrites_local_when_unchanged_and_remote_differs(
+    def test_updates_in_memory_config_when_unchanged_and_remote_differs(
         self, mock_pass, mock_reach, mock_ensure, mock_pull, tmp_path
     ):
         import hashlib
         from sshmenuc.sync.crypto import encrypt_config
 
-        # Compute the real hash of the local config
+        # Compute the real hash of the local config (based on file bytes)
         local_data = SAMPLE_CONFIG
         local_text = json.dumps(local_data, indent=4).encode()
         real_hash = hashlib.sha256(local_text).hexdigest()
@@ -148,9 +148,8 @@ class TestStartupPull:
         state = m.startup_pull()
 
         assert state == SyncState.SYNC_OK
-        with open(str(cfg_file), "r") as f:
-            written = json.load(f)
-        assert written == remote_data
+        # Zero-plaintext: config is in memory, not written to disk
+        assert m.get_config_data() == remote_data
 
 
 class TestPassphraseVerification:

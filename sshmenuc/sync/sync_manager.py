@@ -58,6 +58,9 @@ class SyncManager:
 
         self._state = SyncState.NO_SYNC
         self._sync_cfg: dict = {}
+        # In-memory config: decrypted at startup, updated on save.
+        # When set, this is the authoritative config (zero-plaintext mode).
+        self._config_data: Optional[dict] = None
 
     # -------------------------------------------------------------------------
     # Public interface
@@ -91,8 +94,8 @@ class SyncManager:
             return self._handle_offline()
 
         if pull_result.status == PullStatus.NO_CHANGE:
-            # Nothing changed remotely. Verify the passphrase against the local
-            # encrypted backup so that a wrong passphrase is caught here too.
+            # Nothing changed remotely. Decrypt the local encrypted backup to both
+            # verify the passphrase and populate the in-memory config (zero-plaintext).
             if os.path.isfile(self._enc_path):
                 try:
                     with open(self._enc_path, "rb") as f:
@@ -105,6 +108,8 @@ class SyncManager:
                         # All attempts failed: no valid passphrase in cache
                         self._state = SyncState.SYNC_OFFLINE
                         return self._state
+                    # Store in memory for zero-plaintext mode
+                    self._config_data = result
             self._state = SyncState.SYNC_OK
             return self._state
 
@@ -125,7 +130,7 @@ class SyncManager:
         if last_hash == "" or local_hash == last_hash:
             # First sync (no baseline hash) or local unchanged since last sync:
             # safe to overwrite with remote content.
-            self._write_config(remote_data)
+            self._write_config(remote_data)  # updates _config_data (no plaintext file)
             self._update_local_enc_backup()
             self._save_sync_meta(local_hash=self._hash_config_file(), status="ok")
             self._state = SyncState.SYNC_OK
@@ -373,8 +378,14 @@ class SyncManager:
             logging.warning(f"[SYNC] Cannot write local encrypted backup: {e}")
             return False
 
+    def get_config_data(self) -> Optional[dict]:
+        """Return the in-memory config dict (zero-plaintext mode), or None if not set."""
+        return self._config_data
+
     def _read_config(self) -> Optional[dict]:
-        """Read the plaintext config.json."""
+        """Return in-memory config if available, else read from plaintext file (backward compat)."""
+        if self._config_data is not None:
+            return self._config_data
         try:
             with open(self._config_file, "r") as f:
                 return json.load(f)
@@ -383,15 +394,21 @@ class SyncManager:
             return None
 
     def _write_config(self, data: dict) -> None:
-        """Overwrite config.json with new data (after remote pull)."""
-        try:
-            with open(self._config_file, "w") as f:
-                json.dump(data, f, indent=4)
-        except OSError as e:
-            logging.error(f"[SYNC] Cannot write config file: {e}")
+        """Store config data in memory (zero-plaintext). No plaintext file is written.
+
+        The .enc backup is updated separately by _update_local_enc_backup().
+        """
+        self._config_data = data
 
     def _hash_config_file(self) -> str:
-        """Return SHA-256 hex digest of the current config.json content."""
+        """Return SHA-256 hex digest of the current config content.
+
+        Uses the in-memory dict when available (zero-plaintext mode), otherwise
+        reads the plaintext file (backward compat).
+        """
+        if self._config_data is not None:
+            content = json.dumps(self._config_data, indent=4).encode()
+            return hashlib.sha256(content).hexdigest()
         try:
             with open(self._config_file, "rb") as f:
                 return hashlib.sha256(f.read()).hexdigest()
@@ -439,6 +456,17 @@ class SyncManager:
         """Handle the case where the remote is unreachable."""
         if os.path.isfile(self._enc_path):
             self._state = SyncState.SYNC_OFFLINE
+            # In zero-plaintext mode (no config.json), we must decrypt the local enc
+            # to populate _config_data so the navigator can show the config.
+            # In legacy plaintext mode the navigator reads config.json directly.
+            if not os.path.isfile(self._config_file):
+                passphrase = get_or_prompt()
+                try:
+                    with open(self._enc_path, "rb") as f:
+                        local_enc = f.read()
+                    self._config_data = self._decrypt_with_retry(local_enc, passphrase)
+                except Exception:
+                    pass  # _config_data stays None; navigator falls back gracefully
             self._print("[SYNC] Remote non raggiungibile - uso backup locale criptato", color="yellow")
         else:
             self._state = SyncState.LOCAL_ONLY

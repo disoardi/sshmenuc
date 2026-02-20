@@ -16,6 +16,11 @@ class BaseSSHMenuC(ABC):
     def __init__(self, config_file: Optional[str] = None):
         self.config_file = config_file
         self.config_data: Dict[str, Any] = {"targets": []}
+        # Optional encrypted I/O hooks for zero-plaintext mode (set by ConnectionNavigator).
+        # _encrypted_load() -> Optional[dict]: returns config dict from enc, or None to fall through.
+        # _encrypted_save(dict) -> None: persists config to enc without writing plaintext file.
+        self._encrypted_load = None
+        self._encrypted_save = None
         self._setup_logging()
         
     def _setup_logging(self):
@@ -26,9 +31,18 @@ class BaseSSHMenuC(ABC):
     def load_config(self):
         """Load and normalize the configuration file.
 
-        Handles both new format (with 'targets' key) and legacy format.
-        If the file doesn't exist or is corrupted, creates an empty config.
+        When _encrypted_load is set (zero-plaintext mode), the config is read
+        from the encrypted backend without touching any plaintext file.
+        Otherwise, reads from the plaintext config_file (backward compat).
         """
+        if self._encrypted_load is not None:
+            data = self._encrypted_load()
+            if data is not None:
+                self.config_data = data
+                self._validate_host_entries()
+                return
+            # If encrypted load returns None (not ready yet), fall through to plaintext
+
         try:
             with open(self.config_file, "r") as f:
                 data = json.load(f)
@@ -85,11 +99,19 @@ class BaseSSHMenuC(ABC):
             logging.warning(f"Could not create config directory: {e}")
     
     def save_config(self):
-        """Save configuration to file.
+        """Save configuration.
 
-        Raises:
-            OSError: If file cannot be written (permission denied, disk full, etc.)
+        When _encrypted_save is set (zero-plaintext mode), delegates to the
+        encrypted backend without writing any plaintext file.
+        Otherwise, writes to the plaintext config_file (backward compat).
         """
+        if self._encrypted_save is not None:
+            try:
+                self._encrypted_save(self.config_data)
+                self._on_config_saved()
+            except Exception as e:
+                logging.error(f"Error saving config: {e}")
+            return
         try:
             with open(self.config_file, "w") as file:
                 json.dump(self.config_data, file, indent=4)
