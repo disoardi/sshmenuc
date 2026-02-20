@@ -389,7 +389,7 @@ class ConnectionNavigator(BaseSSHMenuC):
                     input("\nPress Enter to continue...")
 
     def _handle_sync_status(self) -> None:
-        """Handle 's' key - Show sync status panel and allow manual sync."""
+        """Handle 's' key - Show sync status panel, allow manual sync or guided setup."""
         state = self.sync_manager.get_state()
         label = self.sync_manager.get_status_label()
         cfg = self.sync_manager._sync_cfg
@@ -403,20 +403,28 @@ class ConnectionNavigator(BaseSSHMenuC):
             display_url = remote_url.split("@")[-1] if "@" in remote_url else remote_url
             puts(colored.white(f"Remote: {display_url}"))
         else:
-            puts(colored.yellow("Remote: non configurato (crea ~/.config/sshmenuc/sync.json)"))
+            puts(colored.yellow("Remote: non configurato"))
 
         last_sync = cfg.get("last_sync", "mai")
         puts(colored.white(f"Ultimo sync: {last_sync}"))
 
-        if state != SyncState.NO_SYNC and remote_url:
-            puts(colored.white("\n[m] Sync manuale  [Invio] Chiudi"))
+        if state == SyncState.NO_SYNC:
+            puts(colored.white("\n[s] Configura sync remoto  [Invio] Chiudi"))
             choice = input("> ").strip().lower()
-            if choice == "m":
-                puts(colored.yellow("Sync in corso..."))
-                self.sync_manager.startup_pull()
-                self.load_config()
-                self.config_manager.load_config()
-                puts(colored.green("Sync completato."))
-                input("\nPress Enter to continue...")
-        else:
-            input("\nPress Enter to continue...")
+            if choice == "s":
+                configured = self.sync_manager.setup_wizard()
+                if configured:
+                    # Reload state after wizard (may have changed to SYNC_OK/SYNC_OFFLINE)
+                    self.load_config()
+                    self.config_manager.load_config()
+            return
+
+        puts(colored.white("\n[m] Sync manuale  [Invio] Chiudi"))
+        choice = input("> ").strip().lower()
+        if choice == "m":
+            puts(colored.yellow("Sync in corso..."))
+            self.sync_manager.startup_pull()
+            self.load_config()
+            self.config_manager.load_config()
+            puts(colored.green("Sync completato."))
+        input("\nPress Enter to continue...")

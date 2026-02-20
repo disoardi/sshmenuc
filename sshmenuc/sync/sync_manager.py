@@ -25,7 +25,7 @@ from .git_remote import (
     pull_remote,
     push_remote,
 )
-from .passphrase_cache import get_or_prompt, has_passphrase
+from .passphrase_cache import get_or_prompt, has_passphrase, set_passphrase
 
 
 class SyncState(Enum):
@@ -207,6 +207,90 @@ class SyncManager:
             SyncState.LOCAL_ONLY: "SYNC:NO-BACKUP",
         }
         return labels.get(self._state, "")
+
+    def setup_wizard(self) -> bool:
+        """Interactive guided setup to create sync.json from scratch.
+
+        Guides the user through entering remote URL and optional settings,
+        then writes ~/.config/sshmenuc/sync.json and offers an immediate
+        first sync (push of the current local config).
+
+        Returns:
+            True if setup completed and sync.json was written, False if aborted.
+        """
+        print("\n=== Configurazione Sync Remoto ===")
+        print("Configura la sincronizzazione del config su un repo Git privato.")
+        print("Il file config verrà cifrato con AES-256-GCM prima di ogni push.")
+        print("Premi Invio senza digitare per annullare.\n")
+
+        remote_url = input("URL repo remoto (es. git@github.com:utente/repo.git): ").strip()
+        if not remote_url:
+            print("Setup annullato.")
+            return False
+
+        branch = input("Branch [main]: ").strip() or "main"
+
+        default_repo_path = os.path.expanduser("~/.config/sshmenuc/sync_repo")
+        repo_path_input = input(f"Percorso repo locale [{default_repo_path}]: ").strip()
+        sync_repo_path = repo_path_input or default_repo_path
+
+        sync_cfg = {
+            "version": 1,
+            "remote_url": remote_url,
+            "branch": branch,
+            "sync_repo_path": sync_repo_path,
+            "auto_pull": True,
+            "auto_push": True,
+        }
+
+        # Ensure directory exists
+        sync_dir = os.path.dirname(self._sync_config_path)
+        os.makedirs(sync_dir, exist_ok=True)
+
+        try:
+            with open(self._sync_config_path, "w") as f:
+                json.dump(sync_cfg, f, indent=4)
+        except OSError as e:
+            print(f"Errore scrittura sync.json: {e}")
+            return False
+
+        self._sync_cfg = sync_cfg
+        print(f"\nSync configurato. File salvato in: {self._sync_config_path}")
+
+        # Offer immediate first sync (push current local config)
+        answer = input("\nEseguire subito la prima sincronizzazione (push)? [s/N]: ").strip().lower()
+        if answer == "s":
+            import getpass as _getpass
+            passphrase = _getpass.getpass("Scegli una passphrase per cifrare il config: ")
+            passphrase2 = _getpass.getpass("Conferma passphrase: ")
+            if passphrase != passphrase2:
+                print("Le passphrase non coincidono. Sync annullato.")
+                print("Puoi riprovare premendo [s] dal menu principale.")
+                return True  # sync.json was still written
+
+            set_passphrase(passphrase)
+
+            if not ensure_repo_initialized(sync_cfg):
+                print("[SYNC] Impossibile raggiungere il repo remoto. Verifica l'URL e la chiave SSH.")
+                print("Sync.json è stato salvato - riprova premendo [s] dal menu.")
+                return True
+
+            print("Cifratura e push in corso...")
+            enc_bytes = encrypt_config(self._read_config() or {}, passphrase)
+            with open(self._enc_path, "wb") as f:
+                f.write(enc_bytes)
+
+            if push_remote(sync_cfg, enc_bytes):
+                self._save_sync_meta(local_hash=self._hash_config_file(), status="ok")
+                self._state = SyncState.SYNC_OK
+                print("[SYNC] Prima sincronizzazione completata.")
+            else:
+                print("[SYNC] Push fallito. Backup locale cifrato creato.")
+                self._state = SyncState.SYNC_OFFLINE
+        else:
+            self._state = SyncState.NO_SYNC  # sync.json written but no pull/push yet
+
+        return True
 
     # -------------------------------------------------------------------------
     # Internal helpers

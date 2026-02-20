@@ -244,3 +244,115 @@ class TestStatusLabel:
         m = make_manager()
         m._state = SyncState.LOCAL_ONLY
         assert m.get_status_label() == "SYNC:NO-BACKUP"
+
+
+class TestSetupWizard:
+    """Tests for the interactive setup wizard."""
+
+    def test_wizard_aborts_on_empty_url(self, make_manager):
+        """Pressing Enter without typing a URL cancels the wizard."""
+        m = make_manager(sync_cfg={})
+        with patch("builtins.input", return_value=""):
+            result = m.setup_wizard()
+        assert result is False
+        assert not os.path.isfile(m._sync_config_path) or \
+               json.loads(open(m._sync_config_path).read()) == {}
+
+    def test_wizard_writes_sync_json_and_returns_true(self, make_manager, tmp_path):
+        """Providing a URL and declining first sync writes sync.json."""
+        m = make_manager(sync_cfg={})
+        inputs = iter([
+            "git@github.com:user/repo.git",  # remote URL
+            "main",                           # branch
+            "",                               # sync_repo_path (use default)
+            "N",                              # decline first sync
+        ])
+        with patch("builtins.input", side_effect=inputs):
+            result = m.setup_wizard()
+
+        assert result is True
+        saved = json.loads(open(m._sync_config_path).read())
+        assert saved["remote_url"] == "git@github.com:user/repo.git"
+        assert saved["branch"] == "main"
+        assert saved["auto_pull"] is True
+        assert saved["auto_push"] is True
+
+    def test_wizard_uses_default_branch_when_empty(self, make_manager):
+        """Empty branch input defaults to 'main'."""
+        m = make_manager(sync_cfg={})
+        inputs = iter([
+            "git@github.com:user/repo.git",
+            "",   # empty branch → defaults to 'main'
+            "",
+            "N",
+        ])
+        with patch("builtins.input", side_effect=inputs):
+            result = m.setup_wizard()
+
+        assert result is True
+        saved = json.loads(open(m._sync_config_path).read())
+        assert saved["branch"] == "main"
+
+    @patch("sshmenuc.sync.sync_manager.push_remote", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    def test_wizard_first_sync_mismatched_passphrase_no_push(
+        self, mock_ensure, mock_push, make_manager
+    ):
+        """Mismatched passphrases skip the push but still return True (sync.json written)."""
+        m = make_manager(sync_cfg={})
+        inputs = iter([
+            "git@github.com:user/repo.git",
+            "main",
+            "",
+            "s",  # accept first sync
+        ])
+        passphrases = iter(["secret1", "secret2"])  # mismatch
+        with patch("builtins.input", side_effect=inputs), \
+             patch("getpass.getpass", side_effect=passphrases):
+            result = m.setup_wizard()
+
+        assert result is True
+        mock_push.assert_not_called()
+
+    @patch("sshmenuc.sync.sync_manager.push_remote", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    def test_wizard_first_sync_push_success(
+        self, mock_ensure, mock_push, make_manager
+    ):
+        """Matching passphrases + successful push → state SYNC_OK."""
+        m = make_manager(sync_cfg={})
+        inputs = iter([
+            "git@github.com:user/repo.git",
+            "main",
+            "",
+            "s",  # accept first sync
+        ])
+        passphrases = iter(["secret", "secret"])  # matching
+        with patch("builtins.input", side_effect=inputs), \
+             patch("getpass.getpass", side_effect=passphrases):
+            result = m.setup_wizard()
+
+        assert result is True
+        mock_push.assert_called_once()
+        assert m.get_state() == SyncState.SYNC_OK
+
+    @patch("sshmenuc.sync.sync_manager.push_remote", return_value=False)
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    def test_wizard_first_sync_push_failure(
+        self, mock_ensure, mock_push, make_manager
+    ):
+        """Push failure during wizard → state SYNC_OFFLINE, but wizard still returns True."""
+        m = make_manager(sync_cfg={})
+        inputs = iter([
+            "git@github.com:user/repo.git",
+            "main",
+            "",
+            "s",
+        ])
+        passphrases = iter(["secret", "secret"])
+        with patch("builtins.input", side_effect=inputs), \
+             patch("getpass.getpass", side_effect=passphrases):
+            result = m.setup_wizard()
+
+        assert result is True
+        assert m.get_state() == SyncState.SYNC_OFFLINE
