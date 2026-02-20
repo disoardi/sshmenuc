@@ -25,7 +25,7 @@ from .git_remote import (
     pull_remote,
     push_remote,
 )
-from .passphrase_cache import get_or_prompt, has_passphrase, set_passphrase
+from .passphrase_cache import clear as clear_passphrase, get_or_prompt, has_passphrase, set_passphrase
 
 
 class SyncState(Enum):
@@ -91,6 +91,20 @@ class SyncManager:
             return self._handle_offline()
 
         if pull_result.status == PullStatus.NO_CHANGE:
+            # Nothing changed remotely. Verify the passphrase against the local
+            # encrypted backup so that a wrong passphrase is caught here too.
+            if os.path.isfile(self._enc_path):
+                try:
+                    with open(self._enc_path, "rb") as f:
+                        local_enc = f.read()
+                except OSError:
+                    local_enc = None
+                if local_enc:
+                    result = self._decrypt_with_retry(local_enc, passphrase)
+                    if result is None:
+                        # All attempts failed: no valid passphrase in cache
+                        self._state = SyncState.SYNC_OFFLINE
+                        return self._state
             self._state = SyncState.SYNC_OK
             return self._state
 
@@ -100,10 +114,8 @@ class SyncManager:
             self._state = SyncState.SYNC_OK
             return self._state
 
-        try:
-            remote_data = decrypt_config(remote_enc, passphrase)
-        except Exception as e:
-            logging.error(f"[SYNC] Cannot decrypt remote config: {e}")
+        remote_data = self._decrypt_with_retry(remote_enc, passphrase)
+        if remote_data is None:
             self._state = SyncState.SYNC_OFFLINE
             return self._state
 
@@ -397,6 +409,31 @@ class SyncManager:
         except Exception as e:
             logging.warning(f"[SYNC] Push failed: {e}")
             return False
+
+    _MAX_PASSPHRASE_ATTEMPTS = 3
+
+    def _decrypt_with_retry(self, enc_bytes: bytes, passphrase: str) -> Optional[dict]:
+        """Attempt to decrypt enc_bytes, re-prompting on wrong passphrase.
+
+        Returns the decrypted dict on success, or None after all attempts fail.
+        The passphrase cache is updated to the last successful entry.
+        """
+        for attempt in range(self._MAX_PASSPHRASE_ATTEMPTS):
+            try:
+                return decrypt_config(enc_bytes, passphrase)
+            except Exception:
+                remaining = self._MAX_PASSPHRASE_ATTEMPTS - attempt - 1
+                if remaining > 0:
+                    self._print(
+                        f"[SYNC] Passphrase non corretta, riprova ({attempt + 2}/{self._MAX_PASSPHRASE_ATTEMPTS}):",
+                        color="yellow",
+                    )
+                    clear_passphrase()
+                    passphrase = get_or_prompt("Passphrase sync: ")
+                else:
+                    clear_passphrase()
+                    self._print("[SYNC] Passphrase errata. Sincronizzazione non disponibile.", color="red")
+        return None
 
     def _handle_offline(self) -> SyncState:
         """Handle the case where the remote is unreachable."""

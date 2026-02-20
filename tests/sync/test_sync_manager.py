@@ -153,6 +153,129 @@ class TestStartupPull:
         assert written == remote_data
 
 
+class TestPassphraseVerification:
+    """Wrong-passphrase scenarios in startup_pull."""
+
+    def _make_with_enc(self, tmp_path, passphrase=PASSPHRASE):
+        """Create a manager with a valid local enc backup."""
+        from sshmenuc.sync.crypto import encrypt_config
+
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(SYNC_CFG, indent=4))
+        m = SyncManager(str(cfg), sync_config_path=str(s))
+        # Write a valid encrypted backup
+        enc = encrypt_config(SAMPLE_CONFIG, passphrase)
+        with open(m._enc_path, "wb") as f:
+            f.write(enc)
+        return m
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    def test_no_change_wrong_passphrase_returns_offline(
+        self, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        """Wrong passphrase on NO_CHANGE with local enc → SYNC_OFFLINE after all retries."""
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        m = self._make_with_enc(tmp_path, passphrase=PASSPHRASE)
+
+        # All three prompts return the wrong passphrase
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value="wrong"):
+            state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OFFLINE
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    def test_no_change_correct_passphrase_returns_ok(
+        self, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        """Correct passphrase on NO_CHANGE with local enc → SYNC_OK."""
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        m = self._make_with_enc(tmp_path, passphrase=PASSPHRASE)
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE):
+            state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OK
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    def test_no_change_no_enc_backup_skips_verification(
+        self, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        """NO_CHANGE without a local enc backup → no verification, SYNC_OK."""
+        mock_pull.return_value = PullResult(status=PullStatus.NO_CHANGE)
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(SYNC_CFG, indent=4))
+        m = SyncManager(str(cfg), sync_config_path=str(s))
+        # No enc file created
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value="wrong"):
+            state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OK
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    def test_ok_wrong_passphrase_returns_offline_after_retries(
+        self, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        """Wrong passphrase on PullStatus.OK → SYNC_OFFLINE after all retries."""
+        from sshmenuc.sync.crypto import encrypt_config
+        remote_enc = encrypt_config(SAMPLE_CONFIG, PASSPHRASE)
+        mock_pull.return_value = PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc)
+
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(SYNC_CFG, indent=4))
+        m = SyncManager(str(cfg), sync_config_path=str(s))
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value="wrong"):
+            state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OFFLINE
+
+    @patch("sshmenuc.sync.sync_manager.pull_remote")
+    @patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True)
+    @patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True)
+    def test_ok_correct_on_second_attempt_returns_sync_ok(
+        self, mock_reach, mock_ensure, mock_pull, tmp_path
+    ):
+        """Wrong then correct passphrase on PullStatus.OK → SYNC_OK."""
+        import hashlib
+        from sshmenuc.sync.crypto import encrypt_config
+
+        local_bytes = json.dumps(SAMPLE_CONFIG, indent=4).encode()
+        real_hash = hashlib.sha256(local_bytes).hexdigest()
+        sync_cfg = {**SYNC_CFG, "last_config_hash": real_hash}
+
+        remote_enc = encrypt_config(SAMPLE_CONFIG, PASSPHRASE)
+        mock_pull.return_value = PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc)
+
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(SAMPLE_CONFIG, indent=4))
+        s = tmp_path / "sync.json"
+        s.write_text(json.dumps(sync_cfg, indent=4))
+        m = SyncManager(str(cfg), sync_config_path=str(s))
+
+        # First call returns wrong, subsequent calls return correct passphrase.
+        # _update_local_enc_backup() makes a third call after successful decrypt.
+        prompts = iter(["wrong", PASSPHRASE, PASSPHRASE])
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", side_effect=prompts):
+            state = m.startup_pull()
+
+        assert state == SyncState.SYNC_OK
+
+
 class TestPostSavePush:
     def test_does_nothing_on_no_sync(self, make_manager):
         m = make_manager(sync_cfg={})
