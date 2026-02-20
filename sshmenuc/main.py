@@ -1,6 +1,9 @@
 """
 Main entry point for sshmenuc application.
 """
+import os
+import shutil
+
 from .core import ConnectionNavigator
 from .utils import setup_argument_parser, setup_logging
 
@@ -76,6 +79,11 @@ def main():
         ctx_mgr.ensure_context_dir(active_name)
         config_file = ctx_mgr.get_config_file(active_name)
         sync_cfg_override = ctx_mgr.get_sync_cfg(active_name)
+
+        # Import legacy config if context cache is missing but default config exists
+        if not os.path.isfile(config_file) and os.path.isfile(args.config):
+            shutil.copy2(args.config, config_file)
+            print(f"[CTX] Config importato da {args.config} → contesto '{active_name}'")
 
         navigator = ConnectionNavigator(
             config_file,
