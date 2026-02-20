@@ -131,11 +131,13 @@ def pull_remote(sync_cfg: dict) -> PullResult:
             # Branch doesn't exist on remote yet (empty repo)
             return PullResult(status=PullStatus.NO_CHANGE)
 
+        remote_file = sync_cfg.get("remote_file", "config.json.enc")
+
         # Check if there are any differences between local and remote
         diff = _run_git(["diff", f"HEAD..origin/{branch}", "--name-only"], cwd=repo_path)
         if diff.returncode != 0 or not diff.stdout.strip():
             # No remote changes or diff failed (e.g. no local commits yet)
-            remote_enc_bytes = _read_remote_enc(repo_path, branch)
+            remote_enc_bytes = _read_remote_enc(repo_path, branch, remote_file)
             if remote_enc_bytes:
                 return PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc_bytes)
             return PullResult(status=PullStatus.NO_CHANGE)
@@ -146,7 +148,7 @@ def pull_remote(sync_cfg: dict) -> PullResult:
             logging.warning(f"git merge failed: {merge.stderr.strip()}")
             return PullResult(status=PullStatus.OFFLINE)
 
-        remote_enc_bytes = _read_remote_enc(repo_path, branch)
+        remote_enc_bytes = _read_remote_enc(repo_path, branch, remote_file)
         return PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc_bytes)
 
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
@@ -154,9 +156,9 @@ def pull_remote(sync_cfg: dict) -> PullResult:
         return PullResult(status=PullStatus.OFFLINE)
 
 
-def _read_remote_enc(repo_path: str, branch: str) -> Optional[bytes]:
-    """Read the config.json.enc from the local sync repo after pull."""
-    enc_file = os.path.join(repo_path, "config.json.enc")
+def _read_remote_enc(repo_path: str, branch: str, remote_file: str = "config.json.enc") -> Optional[bytes]:
+    """Read the encrypted config file from the local sync repo after pull."""
+    enc_file = os.path.join(repo_path, remote_file)
     if not os.path.isfile(enc_file):
         return None
     with open(enc_file, "rb") as f:
@@ -175,7 +177,8 @@ def push_remote(sync_cfg: dict, enc_bytes: bytes) -> bool:
     """
     repo_path = os.path.expanduser(sync_cfg.get("sync_repo_path", ""))
     branch = sync_cfg.get("branch", "main")
-    enc_file = os.path.join(repo_path, "config.json.enc")
+    remote_file = sync_cfg.get("remote_file", "config.json.enc")
+    enc_file = os.path.join(repo_path, remote_file)
 
     try:
         # Write encrypted file
@@ -183,7 +186,7 @@ def push_remote(sync_cfg: dict, enc_bytes: bytes) -> bool:
             f.write(enc_bytes)
 
         # Git add + commit + push
-        _run_git(["add", "config.json.enc"], cwd=repo_path)
+        _run_git(["add", remote_file], cwd=repo_path)
 
         # Check if there's anything to commit
         status = _run_git(["status", "--porcelain"], cwd=repo_path)

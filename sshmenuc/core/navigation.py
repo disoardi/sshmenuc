@@ -3,7 +3,7 @@ Menu navigation management.
 """
 import os
 import logging
-from typing import List, Any, Dict, Union
+from typing import List, Any, Dict, Optional, Union
 import readchar
 from clint.textui import puts, colored
 
@@ -27,15 +27,19 @@ class ConnectionNavigator(BaseSSHMenuC):
     and tmux integration for group connections.
     """
 
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, sync_cfg_override: Optional[dict] = None,
+                 context_manager=None, active_context: Optional[str] = None):
         super().__init__(config_file)
         self.load_config()
         self.marked_indices = set()
         self.display = MenuDisplay()
         self.config_manager = ConnectionManager(config_file)
         self.editor = ConfigEditor(self.config_manager)
+        # Multi-context support
+        self._context_manager = context_manager
+        self._active_context = active_context
         # Sync setup: install post-save hook and run startup pull
-        self.sync_manager = SyncManager(config_file)
+        self.sync_manager = SyncManager(config_file, sync_cfg_override=sync_cfg_override)
         self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
         self._run_startup_pull()
 
@@ -102,6 +106,8 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_rename(current_path, selected_target)
             elif key == "s":
                 self._handle_sync_status()
+            elif key == "x":
+                self._handle_context_switch()
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.
@@ -299,7 +305,10 @@ class ConnectionNavigator(BaseSSHMenuC):
             current_path: Current navigation path
         """
         self.display.clear_screen()
-        self.display.print_instructions(sync_label=self.sync_manager.get_status_label())
+        self.display.print_instructions(
+            sync_label=self.sync_manager.get_status_label(),
+            context_label=self._active_context or "",
+        )
 
         logging.debug("selected_target: %d", selected_target)
         logging.debug("current_path: %s", current_path)
@@ -427,4 +436,74 @@ class ConnectionNavigator(BaseSSHMenuC):
             self.load_config()
             self.config_manager.load_config()
             puts(colored.green("Sync completato."))
+        input("\nPress Enter to continue...")
+
+    def _handle_context_switch(self) -> None:
+        """Handle 'x' key - Switch to a different context (profile).
+
+        Shows all available contexts, lets the user select one, pulls and
+        decrypts it from the remote, and reloads the UI. If the pull fails,
+        falls back to the previous context silently.
+        """
+        if self._context_manager is None:
+            puts(colored.yellow("[CTX] Nessun contesto configurato (contexts.json assente)"))
+            input("\nPress Enter to continue...")
+            return
+
+        names = self._context_manager.list_contexts()
+        if not names:
+            puts(colored.yellow("[CTX] Nessun contesto disponibile in contexts.json"))
+            input("\nPress Enter to continue...")
+            return
+
+        puts(colored.cyan("\n=== Switch Contesto ==="))
+        for i, name in enumerate(names, 1):
+            marker = " *" if name == self._active_context else ""
+            puts(colored.white(f"  [{i}] {name}{marker}"))
+        puts(colored.white("\n[Invio] Annulla"))
+
+        raw = input("> ").strip()
+        if not raw:
+            return
+
+        try:
+            idx = int(raw) - 1
+        except ValueError:
+            return
+
+        if not (0 <= idx < len(names)):
+            return
+
+        new_name = names[idx]
+        if new_name == self._active_context:
+            puts(colored.yellow(f"[CTX] Contesto '{new_name}' già attivo"))
+            input("\nPress Enter to continue...")
+            return
+
+        puts(colored.yellow(f"[CTX] Caricamento contesto '{new_name}'..."))
+
+        # Build a temporary SyncManager for the new context
+        sync_cfg = self._context_manager.get_sync_cfg(new_name)
+        self._context_manager.ensure_context_dir(new_name)
+        new_config_file = self._context_manager.get_config_file(new_name)
+        temp_sm = SyncManager(new_config_file, sync_cfg_override=sync_cfg)
+
+        state = temp_sm.startup_pull()
+
+        if state in (SyncState.SYNC_OK, SyncState.SYNC_OFFLINE, SyncState.NO_SYNC):
+            # Accept even NO_SYNC (context has no remote configured yet)
+            prev_context = self._active_context
+            self._active_context = new_name
+            self._context_manager.set_active(new_name)
+            self.config_file = new_config_file
+            self.sync_manager = temp_sm
+            self.config_manager = ConnectionManager(new_config_file)
+            self.editor = ConfigEditor(self.config_manager)
+            self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+            self.load_config()
+            self.config_manager.load_config()
+            puts(colored.green(f"[CTX] Contesto cambiato: {prev_context} → {new_name}"))
+        else:
+            puts(colored.red(f"[CTX] Impossibile caricare il contesto '{new_name}' - fallback su '{self._active_context}'"))
+
         input("\nPress Enter to continue...")

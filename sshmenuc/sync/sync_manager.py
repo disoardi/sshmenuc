@@ -38,7 +38,8 @@ class SyncState(Enum):
 class SyncManager:
     """Manages the full sync lifecycle for sshmenuc config."""
 
-    def __init__(self, config_file: str, sync_config_path: Optional[str] = None):
+    def __init__(self, config_file: str, sync_config_path: Optional[str] = None,
+                 sync_cfg_override: Optional[dict] = None):
         self._config_file = config_file
         self._enc_path = config_file + ".enc"
 
@@ -46,6 +47,9 @@ class SyncManager:
             sync_dir = os.path.dirname(config_file)
             sync_config_path = os.path.join(sync_dir, "sync.json")
         self._sync_config_path = sync_config_path
+
+        # If a config dict is injected (multi-context mode), bypass disk reads.
+        self._sync_cfg_override = sync_cfg_override
 
         self._state = SyncState.NO_SYNC
         self._sync_cfg: dict = {}
@@ -60,7 +64,7 @@ class SyncManager:
         Returns:
             The resulting SyncState after the operation.
         """
-        self._sync_cfg = self._load_sync_config()
+        self._sync_cfg = self._sync_cfg_override if self._sync_cfg_override is not None else self._load_sync_config()
         if not self._sync_cfg.get("remote_url"):
             self._state = SyncState.NO_SYNC
             return self._state
@@ -305,10 +309,16 @@ class SyncManager:
             return {}
 
     def _save_sync_meta(self, local_hash: str, status: str) -> None:
-        """Persist last_config_hash and last_sync_status to sync.json."""
+        """Persist last_config_hash and last_sync_status.
+
+        In override mode (multi-context) the caller is responsible for persisting
+        metadata via ContextManager; we only update the in-memory dict here.
+        """
         self._sync_cfg["last_config_hash"] = local_hash
         self._sync_cfg["last_sync"] = datetime.now(timezone.utc).isoformat()
         self._sync_cfg["last_sync_status"] = status
+        if self._sync_cfg_override is not None:
+            return  # Metadata persistence handled by ContextManager
         try:
             with open(self._sync_config_path, "w") as f:
                 json.dump(self._sync_cfg, f, indent=4)

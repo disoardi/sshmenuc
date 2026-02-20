@@ -19,13 +19,17 @@ class MenuDisplay:
         cmd = "cls" if os.name == "nt" else "clear"
         subprocess.run([cmd], shell=True, check=False)
 
-    def print_instructions(self, sync_label: str = "") -> None:
+    def print_instructions(self, sync_label: str = "", context_label: str = "") -> None:
         """Print usage instructions.
 
         Args:
             sync_label: Optional sync status label shown at the end of the line.
+            context_label: Optional active context name (shown when multi-context is active).
         """
-        line = "Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  [s]ync  |  Quit: q"
+        line = "Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  [s]ync"
+        if context_label:
+            line += f"  [x]ctx:{context_label}"
+        line += "  |  Quit: q"
         if sync_label:
             line += f"  [{sync_label}]"
         print(line)

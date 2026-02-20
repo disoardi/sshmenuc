@@ -33,6 +33,13 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         help="Decrypt local encrypted backup and export config in plaintext. Use '-' for stdout.",
         default=None,
     )
+    parser.add_argument(
+        "--context",
+        metavar="NAME",
+        help="Load a specific context (profile) defined in contexts.json. "
+             "If omitted and multiple contexts exist, a selection menu is shown.",
+        default=None,
+    )
     return parser
 
 
@@ -117,6 +124,21 @@ def get_enc_path(config_path: str) -> str:
         Path with .enc suffix (e.g. ~/.config/sshmenuc/config.json.enc)
     """
     return config_path + ".enc"
+
+
+def get_contexts_config_path() -> str:
+    """Return the default path for the multi-context registry file."""
+    return os.path.expanduser("~/.config/sshmenuc/contexts.json")
+
+
+def get_context_dir(name: str) -> str:
+    """Return the local cache directory for a given context name."""
+    return os.path.expanduser(f"~/.config/sshmenuc/contexts/{name}")
+
+
+def get_context_config_file(name: str) -> str:
+    """Return the local plaintext config path for a given context name."""
+    return os.path.expanduser(f"~/.config/sshmenuc/contexts/{name}/config.json")
 
 
 def validate_host_entry(entry: dict) -> bool:

@@ -147,5 +147,8 @@ config_isp.json
 # Sync configuration (personal, contains remote URL and last-sync metadata)
 sync.json
 
+# Multi-context registry (personal, contains all context URLs and metadata)
+contexts.json
+
 # Local encrypted config backup (generated at runtime)
 config.json.enc
