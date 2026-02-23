@@ -5,24 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - feature/config-remote-sync
+## [1.2.0] - 2026-02-20
 
 ### Added
-- **Remote Config Sync**: Manage SSH config via a private Git repository
-  - AES-256-GCM encryption with Scrypt key derivation (passphrase-based)
+
+#### Multi-Context Profiles
+- **Named contexts** (`~/.config/sshmenuc/contexts.json`): Manage multiple independent SSH profiles (e.g. `home`, `work`, `isp`)
+  - Each context has its own remote repo, branch, passphrase and local cache
+  - `[x]` key in menu to switch context interactively at runtime
+  - Auto-selects context on startup (or prompts when more than one is configured)
+- **`--add-context NAME`** wizard: Interactive CLI to create a new encrypted context from an existing `config.json`
+- **Auto-import**: On first run in multi-context mode, legacy `config.json` is automatically copied to the active context's local cache
+- **Migration dialog**: If a plaintext `config.json` exists at the default path with no `.enc` yet, the app offers to convert it to a named context on first launch
+
+#### Remote Config Sync
+- Sync your SSH config across multiple machines using a private Git repository
+  - AES-256-GCM + Scrypt encryption (passphrase-based)
   - Automatic pull on startup, push after every config save
-  - Local encrypted backup (`config.json.enc`) always kept in sync - works offline
+  - Local encrypted backup (`config.json.enc`) always kept in sync — works offline
   - Conflict detection with diff display and interactive resolution (L/R/Abort)
-  - `[s]` key in menu to view sync status and trigger manual sync
-  - Sync status label displayed in menu header (`SYNC:OK`, `SYNC:OFFLINE`, etc.)
-- **Export command** (`--export FILE`): Decrypt and materialize config in plaintext
-  - Use `sshmenuc --export /path/to/output.json` to export to file
-  - Use `sshmenuc --export -` to print to stdout
-- **Offline resilience**: If remote Git is unreachable, app uses local encrypted backup transparently with visible warning
+  - `[s]` key in menu to view sync status, trigger manual sync, or launch guided setup
+  - Sync status label displayed in menu header (`SYNC:OK`, `SYNC:OFFLINE`, `SYNC:NO-BACKUP`)
+- **Export command** (`--export FILE`): Decrypt and export config to plaintext
+  - `sshmenuc --export /path/to/output.json` — export to file
+  - `sshmenuc --export -` — print to stdout
+- **Offline resilience**: If the remote Git is unreachable, the app falls back to the local encrypted backup transparently
+
+#### Zero-Plaintext-On-Disk Mode
+- When sync is configured, **`config.json` is never written to disk**
+  - On startup: the `.enc` file is decrypted into RAM; no plaintext file is created
+  - On save: the config is encrypted directly to `.enc` (no plaintext intermediate file)
+  - Any stale `config.json` is automatically removed after the first successful decrypt
+  - Offline mode: local `.enc` is decrypted in-memory when the remote is unreachable
+- Two simultaneous instances each decrypt independently (Unix process isolation)
+- Passphrase verified on every startup, including when the remote reports no changes (`NO_CHANGE`)
+
+#### Host Entry Improvements
+- **`extra_args`** field: Pass arbitrary SSH arguments per host (e.g. `"-t bash"`, `"-o StrictHostKeyChecking=no"`)
+  - Propagated to both single and multi-host (tmux) connections
+- **Host entry validation** at config load: warns on invalid `extra_args` (not `shlex`-parseable) and out-of-range `port` values; does not abort, allows partial use of valid entries
 
 ### Configuration
-- Add `~/.config/sshmenuc/sync.json` to enable sync (see `sync.json.example`)
-- Without `sync.json`, the app runs normally without sync (no changes to existing behavior)
+- `~/.config/sshmenuc/sync.json` — single-file sync (backward compatible)
+- `~/.config/sshmenuc/contexts.json` — multi-context registry
+- Without either file, the app runs with no sync (no changes to existing behavior)
 
 ### Dependencies
 - Added `cryptography >= 42.0` for AES-256-GCM encryption
