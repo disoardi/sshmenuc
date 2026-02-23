@@ -34,15 +34,112 @@ sshmenuc provides an interactive terminal menu to browse, filter and launch SSH 
 - 🎨 **Colorized terminal UI** - Clear visual feedback and navigation
 - 🔑 **SSH key support** - Per-host identity file configuration
 - 🐳 **Docker/Cloud CLI** - Support for gcloud ssh and other connection types
-- ✅ **Comprehensive testing** - 108 tests ensuring reliability
+- ✅ **Comprehensive testing** - 212 tests ensuring reliability
+- ☁️ **Remote config sync** - Sync encrypted config via a private Git repo (AES-256-GCM)
+- 🗂️ **Multi-context profiles** - Manage multiple independent SSH config sets (home, work, ISP…)
+- 🛡️ **Zero-plaintext-on-disk** - When sync is active, `config.json` is never written to disk
 
 **Security Note**: sshmenuc intentionally does NOT store or persist plain‑text passwords. If a password is required, either remember it at runtime or use a secure password manager / SSH keys. Password history or in‑app password storage is not supported by design for security reasons.
 
 ## Requirements
 
 - Python 3.9+
-- Dependencies: readchar, clint, docker
+- Dependencies: readchar, clint, docker, cryptography
   - These are declared in pyproject.toml for packaging
+
+## Remote Config Sync
+
+Sync your SSH config across multiple machines using a private Git repository.
+The config is encrypted with **AES-256-GCM + Scrypt** before being stored in the repo.
+
+### Setup
+
+1. Create a **private** Git repository (GitHub, GitLab, Gitea, self-hosted)
+2. Copy `sync.json.example` to `~/.config/sshmenuc/sync.json` and edit it:
+
+```json
+{
+    "version": 1,
+    "remote_url": "git@github.com:your-user/your-sshmenuc-config.git",
+    "branch": "main",
+    "sync_repo_path": "~/.config/sshmenuc/sync_repo",
+    "auto_pull": true,
+    "auto_push": true
+}
+```
+
+3. On first launch, you will be asked for a **passphrase**. Use the same passphrase on all machines.
+
+### Behavior
+
+| Condition | Result |
+|-----------|--------|
+| Remote reachable | Pull on startup, push after every save |
+| Remote unreachable, local backup exists | `SYNC:OFFLINE` warning, uses backup |
+| Remote unreachable, no backup | `SYNC:NO-BACKUP` warning, normal operation |
+| No `sync.json` | Normal operation, no sync |
+
+### Export Config (Plaintext)
+
+To decrypt and export the config in plaintext:
+
+```bash
+sshmenuc --export /path/to/output.json   # Export to file
+sshmenuc --export -                       # Print to stdout
+```
+
+### Menu Integration
+
+- **`[s]` key**: Show sync status panel and trigger manual sync
+- **Header label**: Sync state shown at the end of the instruction bar (`SYNC:OK`, `SYNC:OFFLINE`, etc.)
+
+### Security Notes
+
+- The plaintext `config.json` is **never** stored in the remote repo — only the encrypted `config.json.enc` is pushed
+- **Zero-plaintext-on-disk**: when sync is configured, the local `config.json` is also never written to disk; the config lives in RAM only (decrypted from `.enc` at startup)
+- Any stale plaintext `config.json` is automatically removed on first run after `.enc` is available
+- A local encrypted backup (`~/.config/sshmenuc/config.json.enc`) is maintained for offline use
+- The passphrase is kept in memory only during the session (never written to disk)
+- Two simultaneous instances each decrypt independently — no shared plaintext between processes
+
+## Multi-Context Profiles
+
+Manage multiple independent SSH config sets — for example `home`, `work`, and `isp` — each with its own remote repo and passphrase.
+
+### Create a Context
+
+```bash
+sshmenuc --add-context home
+```
+
+The wizard will ask for the remote repo URL, branch, and passphrase, then encrypt and push your current config.
+
+### Switch Context at Runtime
+
+Press **`[x]`** inside the menu to see all available contexts and switch interactively. The selected context is loaded immediately from its remote (or local `.enc` backup if offline).
+
+### Context Registry
+
+All contexts are stored in `~/.config/sshmenuc/contexts.json`. Each entry contains:
+
+```json
+{
+  "contexts": {
+    "home": {
+      "remote_url": "git@github.com:user/sshmenuc-home.git",
+      "branch": "main",
+      "sync_repo_path": "~/.config/sshmenuc/contexts/home/sync_repo",
+      "remote_file": "config.enc"
+    },
+    "work": { "..." }
+  },
+  "active": "home"
+}
+```
+
+### Migration from Single-File Mode
+
+If you have an existing `config.json` at `~/.config/sshmenuc/config.json` and no contexts configured yet, sshmenuc will offer to convert it to a named context on first launch.
 
 ## New Modular Structure
 
@@ -53,18 +150,27 @@ sshmenuc/
 ├── main.py              # Application entry point
 ├── core/                # Core business logic
 │   ├── __init__.py
-│   ├── base.py          # Common base class BaseSSHMenuC
+│   ├── base.py          # Common base class BaseSSHMenuC (encrypted I/O hooks)
 │   ├── config.py        # ConnectionManager (CRUD operations)
 │   ├── config_editor.py # ConfigEditor (interactive editing)
-│   ├── navigation.py    # ConnectionNavigator (menu & keyboard)
+│   ├── navigation.py    # ConnectionNavigator (menu, keyboard, sync wiring)
 │   └── launcher.py      # SSHLauncher (tmux & SSH)
+├── sync/                # Remote sync & encryption
+│   ├── __init__.py
+│   ├── crypto.py        # AES-256-GCM + Scrypt (encrypt/decrypt)
+│   ├── git_remote.py    # Git pull/push helpers
+│   ├── passphrase_cache.py  # In-memory passphrase store
+│   └── sync_manager.py  # Sync state machine + zero-plaintext in-memory config
+├── contexts/            # Multi-context profile management
+│   ├── __init__.py
+│   └── context_manager.py  # contexts.json registry CRUD
 ├── ui/                  # User interface
 │   ├── __init__.py
 │   ├── colors.py        # Color management (Colors)
 │   └── display.py       # Menu rendering (MenuDisplay)
 └── utils/               # Common utilities
     ├── __init__.py
-    └── helpers.py       # Helper functions
+    └── helpers.py       # Argument parser, logging, get_current_user()
 ```
 
 ## Common Base Class
@@ -327,8 +433,7 @@ assert isinstance(navigator, BaseSSHMenuC)
 
 The project includes comprehensive test coverage:
 
-- **102 tests** across all modules
-- **69% code coverage** (targeting 90%+)
+- **212 tests** across all modules
 - **CI/CD integration** with GitHub Actions
 - **Multi-version testing** on Python 3.9, 3.10, 3.11, 3.12
 
@@ -389,14 +494,17 @@ This project is licensed under GPLv3. See the LICENSE file for details.
 
 ## Project Status
 
-**Version 1.1.0** - Production Ready ✅
+**Version 1.2.0** - Production Ready ✅
 
 - ✅ **Available on PyPI**: `pip install sshmenuc`
 - ✅ Complete modular refactoring with OOP design
-- ✅ Comprehensive test suite (102 tests, 69% coverage)
+- ✅ Comprehensive test suite (212 tests)
 - ✅ Full API documentation with Sphinx
 - ✅ CI/CD pipeline with GitHub Actions
 - ✅ Interactive configuration editor
+- ✅ Remote config sync with AES-256-GCM encryption
+- ✅ Multi-context profiles (home, work, ISP…)
+- ✅ Zero-plaintext-on-disk mode
 - ✅ Python 3.9+ support
 
 ## Future Enhancements

@@ -3,7 +3,7 @@ Menu navigation management.
 """
 import os
 import logging
-from typing import List, Any, Dict, Union
+from typing import List, Any, Dict, Optional, Union
 import readchar
 from clint.textui import puts, colored
 
@@ -13,6 +13,7 @@ from .config import ConnectionManager
 from .config_editor import ConfigEditor
 from ..ui.display import MenuDisplay
 from ..utils.helpers import get_current_user
+from ..sync import SyncManager, SyncState
 
 
 # Constants
@@ -25,15 +26,84 @@ class ConnectionNavigator(BaseSSHMenuC):
     Provides interactive keyboard navigation with support for multiple selection
     and tmux integration for group connections.
     """
-    
-    def __init__(self, config_file: str):
+
+    def __init__(self, config_file: str, sync_cfg_override: Optional[dict] = None,
+                 context_manager=None, active_context: Optional[str] = None):
         super().__init__(config_file)
         self.load_config()
         self.marked_indices = set()
         self.display = MenuDisplay()
         self.config_manager = ConnectionManager(config_file)
         self.editor = ConfigEditor(self.config_manager)
+        # Multi-context support
+        self._context_manager = context_manager
+        self._active_context = active_context
+        # Sync setup: install post-save hook and run startup pull
+        self.sync_manager = SyncManager(config_file, sync_cfg_override=sync_cfg_override)
+        self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+        # In multi-context mode, wire the metadata callback so SyncManager can
+        # persist last_sync/last_config_hash to contexts.json via ContextManager.
+        if context_manager is not None and active_context:
+            self.sync_manager._sync_meta_callback = lambda ts, h: context_manager.update_context_meta(
+                active_context, ts, h
+            )
+        self._run_startup_pull()
+        self._wire_encrypted_io()
+
+    def _run_startup_pull(self) -> None:
+        """Pull config from remote at startup and show sync status."""
+        state = self.sync_manager.startup_pull()
+        data = self.sync_manager.get_config_data()
+        if data is not None:
+            # Zero-plaintext mode: config is in memory, set directly without file I/O
+            self.set_config(data)
+            self.config_manager.set_config(data)
+        elif state == SyncState.SYNC_OK:
+            # Backward compat: no in-memory data (e.g. first run, no .enc yet)
+            self.load_config()
+            self.config_manager.load_config()
+        if state == SyncState.SYNC_OFFLINE:
+            puts(colored.yellow("[SYNC] Remote non raggiungibile - uso backup locale criptato"))
+        elif state == SyncState.LOCAL_ONLY:
+            puts(colored.red("[SYNC] Remote non raggiungibile e nessun backup locale trovato"))
     
+    def _wire_encrypted_io(self) -> None:
+        """Install encrypted I/O hooks when sync is configured (zero-plaintext mode).
+
+        After this, load_config() and save_config() on both the navigator and the
+        config_manager bypass the plaintext file and work entirely through
+        SyncManager's in-memory config backed by the .enc file.
+
+        Also removes any stale plaintext config file once in-memory data is verified.
+        """
+        if not self.sync_manager._sync_cfg.get("remote_url"):
+            return  # No sync configured: keep using plaintext file (backward compat)
+
+        sync_mgr = self.sync_manager
+
+        def _enc_load():
+            return sync_mgr.get_config_data()
+
+        def _enc_save(data: dict) -> None:
+            # Store in SyncManager memory; post_save_push() will encrypt to .enc
+            sync_mgr._config_data = data
+
+        self._encrypted_load = _enc_load
+        self._encrypted_save = _enc_save
+        self.config_manager._encrypted_load = _enc_load
+        self.config_manager._encrypted_save = _enc_save
+
+        # Remove stale plaintext file now that we have verified in-memory data.
+        # Only deletes if we actually loaded from .enc (get_config_data() is not None).
+        if (sync_mgr.get_config_data() is not None
+                and self.config_file
+                and os.path.isfile(self.config_file)):
+            try:
+                os.unlink(self.config_file)
+                logging.debug("[SYNC] Plaintext config removed: %s", self.config_file)
+            except OSError as e:
+                logging.warning("[SYNC] Cannot remove plaintext config: %s", e)
+
     def validate_config(self) -> bool:
         """Validate the configuration for navigation.
 
@@ -83,6 +153,10 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_delete(current_path, selected_target)
             elif key == "r":
                 self._handle_rename(current_path, selected_target)
+            elif key == "s":
+                self._handle_sync_status()
+            elif key == "x":
+                self._handle_context_switch()
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.
@@ -280,8 +354,11 @@ class ConnectionNavigator(BaseSSHMenuC):
             current_path: Current navigation path
         """
         self.display.clear_screen()
-        self.display.print_instructions()
-        
+        self.display.print_instructions(
+            sync_label=self.sync_manager.get_status_label(),
+            context_label=self._active_context or "",
+        )
+
         logging.debug("selected_target: %d", selected_target)
         logging.debug("current_path: %s", current_path)
         
@@ -368,3 +445,121 @@ class ConnectionNavigator(BaseSSHMenuC):
                 if self.editor.rename_target(target_name):
                     self.load_config()
                     input("\nPress Enter to continue...")
+
+    def _handle_sync_status(self) -> None:
+        """Handle 's' key - Show sync status panel, allow manual sync or guided setup."""
+        state = self.sync_manager.get_state()
+        label = self.sync_manager.get_status_label()
+        cfg = self.sync_manager._sync_cfg
+
+        puts(colored.cyan("\n=== Sync Status ==="))
+        puts(colored.white(f"Stato: {label or 'NO SYNC'}"))
+
+        remote_url = cfg.get("remote_url", "")
+        if remote_url:
+            # Mask credentials in URL for display
+            display_url = remote_url.split("@")[-1] if "@" in remote_url else remote_url
+            puts(colored.white(f"Remote: {display_url}"))
+        else:
+            puts(colored.yellow("Remote: non configurato"))
+
+        last_sync = cfg.get("last_sync", "mai")
+        puts(colored.white(f"Ultimo sync: {last_sync}"))
+
+        if state == SyncState.NO_SYNC:
+            puts(colored.white("\n[s] Configura sync remoto  [Invio] Chiudi"))
+            choice = input("> ").strip().lower()
+            if choice == "s":
+                configured = self.sync_manager.setup_wizard()
+                if configured:
+                    # Reload state after wizard (may have changed to SYNC_OK/SYNC_OFFLINE)
+                    self.load_config()
+                    self.config_manager.load_config()
+            return
+
+        puts(colored.white("\n[m] Sync manuale  [Invio] Chiudi"))
+        choice = input("> ").strip().lower()
+        if choice == "m":
+            puts(colored.yellow("Sync in corso..."))
+            self.sync_manager.startup_pull()
+            self.load_config()
+            self.config_manager.load_config()
+            puts(colored.green("Sync completato."))
+        input("\nPress Enter to continue...")
+
+    def _handle_context_switch(self) -> None:
+        """Handle 'x' key - Switch to a different context (profile).
+
+        Shows all available contexts, lets the user select one, pulls and
+        decrypts it from the remote, and reloads the UI. If the pull fails,
+        falls back to the previous context silently.
+        """
+        if self._context_manager is None:
+            puts(colored.yellow("[CTX] Nessun contesto configurato (contexts.json assente)"))
+            input("\nPress Enter to continue...")
+            return
+
+        names = self._context_manager.list_contexts()
+        if not names:
+            puts(colored.yellow("[CTX] Nessun contesto disponibile in contexts.json"))
+            input("\nPress Enter to continue...")
+            return
+
+        puts(colored.cyan("\n=== Switch Contesto ==="))
+        for i, name in enumerate(names, 1):
+            marker = " *" if name == self._active_context else ""
+            puts(colored.white(f"  [{i}] {name}{marker}"))
+        puts(colored.white("\n[Invio] Annulla"))
+
+        raw = input("> ").strip()
+        if not raw:
+            return
+
+        try:
+            idx = int(raw) - 1
+        except ValueError:
+            return
+
+        if not (0 <= idx < len(names)):
+            return
+
+        new_name = names[idx]
+        if new_name == self._active_context:
+            puts(colored.yellow(f"[CTX] Contesto '{new_name}' già attivo"))
+            input("\nPress Enter to continue...")
+            return
+
+        puts(colored.yellow(f"[CTX] Caricamento contesto '{new_name}'..."))
+
+        # Build a temporary SyncManager for the new context
+        sync_cfg = self._context_manager.get_sync_cfg(new_name)
+        self._context_manager.ensure_context_dir(new_name)
+        new_config_file = self._context_manager.get_config_file(new_name)
+        temp_sm = SyncManager(new_config_file, sync_cfg_override=sync_cfg)
+
+        state = temp_sm.startup_pull()
+
+        if state in (SyncState.SYNC_OK, SyncState.SYNC_OFFLINE, SyncState.NO_SYNC):
+            # Accept even NO_SYNC (context has no remote configured yet)
+            prev_context = self._active_context
+            self._active_context = new_name
+            self._context_manager.set_active(new_name)
+            self.config_file = new_config_file
+            self.sync_manager = temp_sm
+            self.config_manager = ConnectionManager(new_config_file)
+            self.editor = ConfigEditor(self.config_manager)
+            self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+            # Re-wire encrypted I/O for the new context
+            self._wire_encrypted_io()
+            data = self.sync_manager.get_config_data()
+            if data is not None:
+                self.set_config(data)
+                self.config_manager.set_config(data)
+            else:
+                self.load_config()
+                self.config_manager.load_config()
+            puts(colored.green(f"[CTX] Contesto cambiato: {prev_context} → {new_name}"))
+        else:
+            puts(colored.red(f"[CTX] Impossibile caricare il contesto '{new_name}' - fallback su '{self._active_context}'"))
+
+        input("\nPress Enter to continue...")

@@ -1,0 +1,30 @@
+{
+    "version": 1,
+    "active": "home",
+    "contexts": {
+        "home": {
+            "remote_url": "git@github.com:your-user/sshmenuc-config.git",
+            "remote_file": "home.enc",
+            "branch": "main",
+            "sync_repo_path": "~/.config/sshmenuc/sync_repos/sshmenuc_config",
+            "auto_pull": true,
+            "auto_push": true
+        },
+        "isp": {
+            "remote_url": "git@github.com:your-user/sshmenuc-config.git",
+            "remote_file": "isp.enc",
+            "branch": "main",
+            "sync_repo_path": "~/.config/sshmenuc/sync_repos/sshmenuc_config",
+            "auto_pull": true,
+            "auto_push": true
+        },
+        "poste": {
+            "remote_url": "git@github.com:your-user/poste-config.git",
+            "remote_file": "config.enc",
+            "branch": "main",
+            "sync_repo_path": "~/.config/sshmenuc/sync_repos/poste_config",
+            "auto_pull": true,
+            "auto_push": true
+        }
+    }
+}

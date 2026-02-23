@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "remote_url": "git@github.com:your-user/your-sshmenuc-config.git",
+    "branch": "main",
+    "sync_repo_path": "~/.config/sshmenuc/sync_repo",
+    "auto_pull": true,
+    "auto_push": true
+}
