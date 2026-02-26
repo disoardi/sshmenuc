@@ -101,6 +101,25 @@ class ContextManager:
             data["active"] = name
         self._save(data)
 
+    def update_sync_config(self, name: str, partial_cfg: dict) -> None:
+        """Merge partial_cfg into the sync config of an existing context.
+
+        Only updates keys present in partial_cfg; preserves last_sync,
+        last_config_hash, and all other existing fields.
+
+        Args:
+            name: Context name to update.
+            partial_cfg: Dict with keys to update (e.g. {"remote_url": "...", "branch": "..."}).
+
+        Raises:
+            KeyError: If the context does not exist in contexts.json.
+        """
+        data = self._load()
+        if name not in data.get("contexts", {}):
+            raise KeyError(f"Context '{name}' not found in contexts.json")
+        data["contexts"][name].update(partial_cfg)
+        self._save(data)
+
     def remove_context(self, name: str) -> None:
         """Remove a context entry. If it was active, reset to first remaining."""
         data = self._load()

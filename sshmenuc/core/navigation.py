@@ -157,6 +157,8 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self._handle_sync_status()
             elif key == "x":
                 self._handle_context_switch()
+            elif key == "c" and self._context_manager is not None:
+                self._handle_context_manage()
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.
@@ -487,6 +489,52 @@ class ConnectionNavigator(BaseSSHMenuC):
             puts(colored.green("Sync completato."))
         input("\nPress Enter to continue...")
 
+    def _switch_to_context(self, new_name: str) -> bool:
+        """Load and activate a context by name.
+
+        Builds a temporary SyncManager, runs startup_pull, and on success
+        replaces the navigator's active context, sync manager, config manager,
+        and config editor with those of the new context.
+
+        Args:
+            new_name: Name of the context to switch to.
+
+        Returns:
+            True if the switch succeeded, False if startup_pull failed.
+        """
+        puts(colored.yellow(f"[CTX] Caricamento contesto '{new_name}'..."))
+
+        sync_cfg = self._context_manager.get_sync_cfg(new_name)
+        self._context_manager.ensure_context_dir(new_name)
+        new_config_file = self._context_manager.get_config_file(new_name)
+        temp_sm = SyncManager(new_config_file, sync_cfg_override=sync_cfg)
+
+        state = temp_sm.startup_pull()
+
+        if state not in (SyncState.SYNC_OK, SyncState.SYNC_OFFLINE, SyncState.NO_SYNC):
+            puts(colored.red(f"[CTX] Impossibile caricare '{new_name}' - fallback su '{self._active_context}'"))
+            return False
+
+        # Accept SYNC_OK, SYNC_OFFLINE, NO_SYNC (context may not have sync yet)
+        prev_context = self._active_context
+        self._active_context = new_name
+        self._context_manager.set_active(new_name)
+        self.config_file = new_config_file
+        self.sync_manager = temp_sm
+        self.config_manager = ConnectionManager(new_config_file)
+        self.editor = ConfigEditor(self.config_manager)
+        self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
+        self._wire_encrypted_io()
+        data = self.sync_manager.get_config_data()
+        if data is not None:
+            self.set_config(data)
+            self.config_manager.set_config(data)
+        else:
+            self.load_config()
+            self.config_manager.load_config()
+        puts(colored.green(f"[CTX] Contesto cambiato: {prev_context} → {new_name}"))
+        return True
+
     def _handle_context_switch(self) -> None:
         """Handle 'x' key - Switch to a different context (profile).
 
@@ -529,37 +577,96 @@ class ConnectionNavigator(BaseSSHMenuC):
             input("\nPress Enter to continue...")
             return
 
-        puts(colored.yellow(f"[CTX] Caricamento contesto '{new_name}'..."))
+        self._switch_to_context(new_name)
+        input("\nPress Enter to continue...")
 
-        # Build a temporary SyncManager for the new context
-        sync_cfg = self._context_manager.get_sync_cfg(new_name)
-        self._context_manager.ensure_context_dir(new_name)
-        new_config_file = self._context_manager.get_config_file(new_name)
-        temp_sm = SyncManager(new_config_file, sync_cfg_override=sync_cfg)
+    def _handle_context_manage(self) -> None:
+        """Handle 'c' key - Add a new context or edit the sync config of an existing one."""
+        names = self._context_manager.list_contexts()
 
-        state = temp_sm.startup_pull()
+        puts(colored.cyan("\n=== Gestione Contesti ==="))
+        puts(colored.white("  [1] Nuovo contesto"))
+        for i, name in enumerate(names, 2):
+            marker = " *" if name == self._active_context else ""
+            puts(colored.white(f"  [{i}] Modifica sync: {name}{marker}"))
+        puts(colored.white("\n[Invio] Annulla"))
 
-        if state in (SyncState.SYNC_OK, SyncState.SYNC_OFFLINE, SyncState.NO_SYNC):
-            # Accept even NO_SYNC (context has no remote configured yet)
-            prev_context = self._active_context
-            self._active_context = new_name
-            self._context_manager.set_active(new_name)
-            self.config_file = new_config_file
-            self.sync_manager = temp_sm
-            self.config_manager = ConnectionManager(new_config_file)
-            self.editor = ConfigEditor(self.config_manager)
+        raw = input("> ").strip()
+        if not raw:
+            return
+
+        if raw == "1":
+            self._handle_new_context()
+            return
+
+        try:
+            idx = int(raw) - 2
+        except ValueError:
+            return
+
+        if 0 <= idx < len(names):
+            self._handle_edit_context_sync(names[idx])
+
+    def _handle_new_context(self) -> None:
+        """Wizard to create a new context from within the running app."""
+        name = input("Nome nuovo contesto: ").strip()
+        if not name:
+            return
+        if name in self._context_manager.list_contexts():
+            puts(colored.red(f"[CTX] Contesto '{name}' già esistente"))
+            input("\nPress Enter to continue...")
+            return
+
+        from ..contexts.wizard import add_context_wizard
+        created = add_context_wizard(name)
+        if not created:
+            return
+
+        puts(colored.green(f"[CTX] Contesto '{name}' creato."))
+        switch = input(f"Passare subito a '{name}'? [s/N]: ").strip().lower()
+        if switch == "s":
+            self._switch_to_context(name)
+        input("\nPress Enter to continue...")
+
+    def _handle_edit_context_sync(self, name: str) -> None:
+        """Edit the sync configuration (remote_url, branch) of a context.
+
+        If the edited context is currently active, the SyncManager is
+        reinitialized in-session so subsequent saves use the new config.
+
+        Args:
+            name: Name of the context whose sync config should be updated.
+        """
+        current_cfg = self._context_manager.get_sync_cfg(name)
+
+        puts(colored.cyan(f"\n--- Modifica sync: {name} ---"))
+        puts(colored.white(f"  remote_url: {current_cfg.get('remote_url', '(non configurato)')}"))
+        puts(colored.white(f"  branch:     {current_cfg.get('branch', 'main')}"))
+        puts(colored.white("\nPremi Invio per mantenere il valore corrente.\n"))
+
+        new_url = input("Nuovo remote URL: ").strip()
+        new_branch = input("Nuovo branch: ").strip()
+
+        if not new_url and not new_branch:
+            puts(colored.white("Nessuna modifica effettuata."))
+            input("\nPress Enter to continue...")
+            return
+
+        partial: dict = {}
+        if new_url:
+            partial["remote_url"] = new_url
+        if new_branch:
+            partial["branch"] = new_branch
+
+        self._context_manager.update_sync_config(name, partial)
+        puts(colored.green(f"[CTX] Config sync di '{name}' aggiornata."))
+
+        # If it's the active context, reinitialize SyncManager in-session
+        if name == self._active_context:
+            new_cfg = self._context_manager.get_sync_cfg(name)
+            self.sync_manager = SyncManager(self.config_file, sync_cfg_override=new_cfg)
             self.config_manager._post_save_hook = lambda: self.sync_manager.post_save_push()
-            # Re-wire encrypted I/O for the new context
             self._wire_encrypted_io()
-            data = self.sync_manager.get_config_data()
-            if data is not None:
-                self.set_config(data)
-                self.config_manager.set_config(data)
-            else:
-                self.load_config()
-                self.config_manager.load_config()
-            puts(colored.green(f"[CTX] Contesto cambiato: {prev_context} → {new_name}"))
-        else:
-            puts(colored.red(f"[CTX] Impossibile caricare il contesto '{new_name}' - fallback su '{self._active_context}'"))
+            puts(colored.yellow("[SYNC] SyncManager aggiornato con la nuova configurazione."))
 
         input("\nPress Enter to continue...")
