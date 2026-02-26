@@ -270,15 +270,15 @@ class TestContextManagement:
 
         mock_new.assert_called_once()
 
-    def test_handle_context_manage_choice_edit_sync(self, temp_config_file):
-        """Choice '2' selects the first context and calls _handle_edit_context_sync."""
+    def test_handle_context_manage_choice_selects_context(self, temp_config_file):
+        """Choice '2' selects the first context and calls _handle_context_actions."""
         nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
 
         with patch("builtins.input", return_value="2"), \
-             patch.object(nav, "_handle_edit_context_sync") as mock_edit:
+             patch.object(nav, "_handle_context_actions") as mock_actions:
             nav._handle_context_manage()
 
-        mock_edit.assert_called_once_with("home")
+        mock_actions.assert_called_once_with("home")
 
     def test_handle_context_manage_invalid_input(self, temp_config_file):
         """Non-numeric input in _handle_context_manage is silently ignored."""
@@ -396,3 +396,141 @@ class TestContextManagement:
 
         assert nav.sync_manager is not old_sm
         MockSM.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # _handle_context_actions
+    # ------------------------------------------------------------------
+
+    def test_handle_context_actions_cancel(self, temp_config_file):
+        """Empty input in _handle_context_actions cancels without side effects."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        with patch("builtins.input", return_value=""):
+            nav._handle_context_actions("isp")
+
+        ctx_mgr.update_sync_config.assert_not_called()
+
+    def test_handle_context_actions_m_calls_edit_sync(self, temp_config_file):
+        """Choice 'm' in _handle_context_actions calls _handle_edit_context_sync."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        with patch("builtins.input", return_value="m"), \
+             patch.object(nav, "_handle_edit_context_sync") as mock_edit:
+            nav._handle_context_actions("isp")
+
+        mock_edit.assert_called_once_with("isp")
+
+    def test_handle_context_actions_i_calls_reimport(self, temp_config_file):
+        """Choice 'i' in _handle_context_actions calls _handle_reimport_context."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        with patch("builtins.input", return_value="i"), \
+             patch.object(nav, "_handle_reimport_context") as mock_reimport:
+            nav._handle_context_actions("isp")
+
+        mock_reimport.assert_called_once_with("isp")
+
+    # ------------------------------------------------------------------
+    # _handle_reimport_context
+    # ------------------------------------------------------------------
+
+    def test_reimport_context_file_not_found(self, temp_config_file):
+        """_handle_reimport_context shows error and returns when file is missing."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        with patch("builtins.input", side_effect=["/nonexistent/file.json", ""]):
+            nav._handle_reimport_context("isp")
+
+        ctx_mgr.update_context_meta.assert_not_called()
+
+    def test_reimport_context_cancel_on_empty_path(self, temp_config_file):
+        """Empty file path cancels reimport without any side effects."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        with patch("builtins.input", return_value=""):
+            nav._handle_reimport_context("isp")
+
+        ctx_mgr.update_context_meta.assert_not_called()
+
+    def test_reimport_context_updates_active_context_in_memory(self, tmp_path, temp_config_file):
+        """Reimporting the active context updates in-memory config immediately."""
+        import json
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        # Write a plaintext JSON source file
+        src = tmp_path / "import_me.json"
+        config_data = {"targets": [{"ISP": [{"friendly": "router", "host": "192.168.1.1"}]}]}
+        src.write_text(json.dumps(config_data))
+
+        ctx_mgr.get_enc_file.return_value = str(tmp_path / "home.enc")
+        ctx_mgr.get_sync_cfg.return_value = {}  # no remote_url → skip push prompt
+
+        with patch("builtins.input", side_effect=[str(src), "n", ""]), \
+             patch("sshmenuc.sync.passphrase_cache.get_or_prompt", return_value="secret"), \
+             patch("sshmenuc.sync.crypto.encrypt_config", return_value=b"ENC"):
+            nav._handle_reimport_context("home")  # "home" is active
+
+        assert nav.sync_manager._config_data == config_data
+        ctx_mgr.update_context_meta.assert_called_once()
+
+    def test_reimport_context_deletes_source_when_confirmed(self, tmp_path, temp_config_file):
+        """Source file is deleted after reimport when user confirms."""
+        import json
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        src = tmp_path / "plain.json"
+        src.write_text(json.dumps({"targets": []}))
+
+        ctx_mgr.get_enc_file.return_value = str(tmp_path / "home.enc")
+        ctx_mgr.get_sync_cfg.return_value = {}
+
+        with patch("builtins.input", side_effect=[str(src), "s", ""]), \
+             patch("sshmenuc.sync.passphrase_cache.get_or_prompt", return_value="secret"), \
+             patch("sshmenuc.sync.crypto.encrypt_config", return_value=b"ENC"):
+            nav._handle_reimport_context("home")
+
+        assert not src.exists(), "Source file should be deleted when user confirms"
+
+    def test_reimport_context_keeps_source_when_declined(self, tmp_path, temp_config_file):
+        """Source file is kept after reimport when user declines deletion."""
+        import json
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        src = tmp_path / "plain.json"
+        src.write_text(json.dumps({"targets": []}))
+
+        ctx_mgr.get_enc_file.return_value = str(tmp_path / "home.enc")
+        ctx_mgr.get_sync_cfg.return_value = {}
+
+        with patch("builtins.input", side_effect=[str(src), "n", ""]), \
+             patch("sshmenuc.sync.passphrase_cache.get_or_prompt", return_value="secret"), \
+             patch("sshmenuc.sync.crypto.encrypt_config", return_value=b"ENC"):
+            nav._handle_reimport_context("home")
+
+        assert src.exists(), "Source file should be kept when user declines"
+
+    def test_reimport_context_pushes_to_remote_when_confirmed(self, tmp_path, temp_config_file):
+        """push_remote is called when user confirms push after reimport."""
+        import json
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+
+        src = tmp_path / "plain.json"
+        src.write_text(json.dumps({"targets": []}))
+
+        ctx_mgr.get_enc_file.return_value = str(tmp_path / "home.enc")
+        ctx_mgr.get_sync_cfg.return_value = {
+            "remote_url": "git@github.com:user/cfg.git",
+            "branch": "main",
+            "remote_file": "home.enc",
+            "sync_repo_path": str(tmp_path / "repo"),
+        }
+
+        with patch("builtins.input", side_effect=[str(src), "n", "s", ""]), \
+             patch("sshmenuc.sync.passphrase_cache.get_or_prompt", return_value="secret"), \
+             patch("sshmenuc.sync.crypto.encrypt_config", return_value=b"ENC"), \
+             patch("sshmenuc.sync.git_remote.ensure_repo_initialized", return_value=True) as mock_init, \
+             patch("sshmenuc.sync.git_remote.push_remote", return_value=True) as mock_push:
+            nav._handle_reimport_context("home")
+
+        mock_init.assert_called_once()
+        mock_push.assert_called_once()

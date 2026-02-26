@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-02-26
+
+### Added
+- **`[c]` → contesto → `[i]` Reimport da file in chiaro**: permette di reimportare un config JSON
+  in chiaro nel contesto corrente senza uscire dall'app. Il file viene cifrato con la passphrase
+  della sessione, salvato nel backup `.enc` locale e opzionalmente pushato al remote.
+  Se il contesto è attivo, la configurazione in memoria viene aggiornata immediatamente.
+- **Eliminazione file sorgente dopo import**: dopo aver importato un file in chiaro (wizard
+  `--add-context` o reimport da UI), l'app chiede se eliminare il file originale (default: sì).
+- **Sub-menu per i contesti nel `[c]`**: selezionando un contesto ora si apre un sub-menu con
+  `[m]` (Modifica parametri sync) e `[i]` (Reimport da file), invece di procedere direttamente
+  alla modifica.
+
 ## [1.3.2] - 2026-02-26
 
 ### Fixed
