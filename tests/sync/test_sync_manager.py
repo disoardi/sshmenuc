@@ -548,6 +548,91 @@ class TestSyncMetaCallback:
 
         assert callback_calls == [], "Callback must NOT be called in single-file mode"
 
+    def test_no_false_conflict_zero_plaintext_same_remote(self, tmp_path):
+        """No conflict when plaintext is absent, local .enc matches remote and last hash.
+
+        This simulates the second startup in zero-plaintext mode after a successful
+        first sync: the plaintext file was deleted but the local .enc backup exists
+        with the same data as the remote. Conflict must NOT be triggered.
+        """
+        import hashlib
+        from sshmenuc.sync.crypto import encrypt_config
+
+        hosts_config = {"targets": [{"ISP": [{"host": "srv1.isp.net"}]}]}
+        local_hash = hashlib.sha256(json.dumps(hosts_config, indent=4).encode()).hexdigest()
+
+        # contexts.json has last_config_hash from the previous successful sync
+        override = {**SYNC_CFG, "last_config_hash": local_hash}
+        # Local .enc backup has the same data as remote
+        remote_enc = encrypt_config(hosts_config, PASSPHRASE)
+
+        # Config file does NOT exist (deleted by _wire_encrypted_io after first sync)
+        cfg_path = str(tmp_path / "config.json")
+        enc_path = cfg_path + ".enc"
+
+        # Write local .enc backup
+        with open(enc_path, "wb") as f:
+            f.write(encrypt_config(hosts_config, PASSPHRASE))
+
+        m = SyncManager(cfg_path, sync_cfg_override=override)
+        # config.json does not exist, but enc backup does
+
+        conflict_called = []
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE), \
+             patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.pull_remote",
+                   return_value=MagicMock(status=PullStatus.OK, remote_enc_bytes=remote_enc)), \
+             patch.object(m, "_resolve_conflict",
+                          side_effect=lambda *a: conflict_called.append(True) or "abort"):
+            state = m.startup_pull()
+
+        assert conflict_called == [], "No conflict expected: remote and local .enc are in sync"
+        assert state == SyncState.SYNC_OK
+        assert m.get_config_data() == hosts_config
+
+    def test_conflict_detected_zero_plaintext_both_sides_changed(self, tmp_path):
+        """Conflict correctly detected when both local .enc AND remote changed since last sync."""
+        import hashlib
+        from sshmenuc.sync.crypto import encrypt_config
+
+        # Three distinct versions: initial, local edit, remote edit
+        initial_config = {"targets": [{"ISP": [{"host": "orig.isp.net"}]}]}
+        local_config = {"targets": [{"ISP": [{"host": "local-edit.isp.net"}]}]}
+        remote_config = {"targets": [{"ISP": [{"host": "remote-edit.isp.net"}]}]}
+
+        # last_config_hash represents the INITIAL state (both sides diverged from it)
+        initial_hash = hashlib.sha256(json.dumps(initial_config, indent=4).encode()).hexdigest()
+        override = {**SYNC_CFG, "last_config_hash": initial_hash}
+
+        remote_enc = encrypt_config(remote_config, PASSPHRASE)
+
+        cfg_path = str(tmp_path / "config.json")
+        enc_path = cfg_path + ".enc"
+
+        # Local .enc has the locally-edited data (diverged from initial_hash)
+        with open(enc_path, "wb") as f:
+            f.write(encrypt_config(local_config, PASSPHRASE))
+
+        m = SyncManager(cfg_path, sync_cfg_override=override)
+        conflict_called = []
+
+        with patch("sshmenuc.sync.sync_manager.get_or_prompt", return_value=PASSPHRASE), \
+             patch("sshmenuc.sync.sync_manager.is_remote_reachable", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.ensure_repo_initialized", return_value=True), \
+             patch("sshmenuc.sync.sync_manager.pull_remote",
+                   return_value=MagicMock(status=PullStatus.OK, remote_enc_bytes=remote_enc)), \
+             patch.object(m, "_resolve_conflict",
+                          side_effect=lambda loc, rem: conflict_called.append((loc, rem)) or "remote"):
+            m.startup_pull()
+
+        # Conflict must be detected: both local and remote changed from last known state
+        assert len(conflict_called) == 1, "Conflict dialog expected"
+        loc, rem = conflict_called[0]
+        assert loc == local_config, "Local data must come from the restored .enc backup"
+        assert rem == remote_config
+
     def test_no_false_conflict_when_last_hash_empty(self, tmp_path):
         """First launch with empty last_config_hash must NOT trigger a conflict dialog."""
         from sshmenuc.sync.crypto import encrypt_config
