@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-02-26
+
+### Fixed
+- **False conflict detection in zero-plaintext mode** (`startup_pull`): after the first
+  successful sync, the plaintext `config.json` is deleted. On subsequent startups,
+  `_hash_config_file()` returned `""` (file not found) which incorrectly triggered the
+  "both sides changed" conflict dialog on every run. Fixed by restoring `_config_data`
+  from the local `.enc` backup before the conflict check, so the local hash is computed
+  correctly from the actual local state.
+
 ## [1.3.1] - 2026-02-26
 
 ### Fixed

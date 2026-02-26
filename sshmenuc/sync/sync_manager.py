@@ -124,6 +124,23 @@ class SyncManager:
             self._state = SyncState.SYNC_OFFLINE
             return self._state
 
+        # Zero-plaintext mode: the plaintext file may have been deleted by a
+        # previous successful startup (_wire_encrypted_io removes it once .enc
+        # is verified). Restore _config_data from the local .enc backup so that
+        # _hash_config_file() returns the correct local hash and avoids a false
+        # "both sides changed" conflict on every subsequent startup.
+        if (self._config_data is None
+                and not os.path.isfile(self._config_file)
+                and os.path.isfile(self._enc_path)):
+            try:
+                with open(self._enc_path, "rb") as _f:
+                    _local_enc = _f.read()
+                if _local_enc:
+                    self._config_data = decrypt_config(_local_enc, get_or_prompt())
+            except Exception as _e:
+                logging.debug("[SYNC] Cannot restore local backup for conflict check: %s", _e)
+                # _config_data stays None; local_hash will be "" → treated as first sync
+
         local_hash = self._hash_config_file()
         last_hash = self._sync_cfg.get("last_config_hash", "")
 
