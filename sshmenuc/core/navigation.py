@@ -629,10 +629,13 @@ class ConnectionNavigator(BaseSSHMenuC):
         input("\nPress Enter to continue...")
 
     def _handle_edit_context_sync(self, name: str) -> None:
-        """Edit the sync configuration (remote_url, branch) of a context.
+        """Edit the sync configuration (remote_url, branch, remote_file) of a context.
 
         If the edited context is currently active, the SyncManager is
         reinitialized in-session so subsequent saves use the new config.
+
+        Changing remote_file only affects future pushes; the old file in the
+        remote repo must be removed manually if no longer needed.
 
         Args:
             name: Name of the context whose sync config should be updated.
@@ -640,14 +643,16 @@ class ConnectionNavigator(BaseSSHMenuC):
         current_cfg = self._context_manager.get_sync_cfg(name)
 
         puts(colored.cyan(f"\n--- Modifica sync: {name} ---"))
-        puts(colored.white(f"  remote_url: {current_cfg.get('remote_url', '(non configurato)')}"))
-        puts(colored.white(f"  branch:     {current_cfg.get('branch', 'main')}"))
+        puts(colored.white(f"  remote_url:  {current_cfg.get('remote_url', '(non configurato)')}"))
+        puts(colored.white(f"  branch:      {current_cfg.get('branch', 'main')}"))
+        puts(colored.white(f"  remote_file: {current_cfg.get('remote_file', '(non configurato)')}"))
         puts(colored.white("\nPremi Invio per mantenere il valore corrente.\n"))
 
         new_url = input("Nuovo remote URL: ").strip()
         new_branch = input("Nuovo branch: ").strip()
+        new_remote_file = input("Nuovo nome file remoto (es. isp.enc): ").strip()
 
-        if not new_url and not new_branch:
+        if not new_url and not new_branch and not new_remote_file:
             puts(colored.white("Nessuna modifica effettuata."))
             input("\nPress Enter to continue...")
             return
@@ -657,6 +662,9 @@ class ConnectionNavigator(BaseSSHMenuC):
             partial["remote_url"] = new_url
         if new_branch:
             partial["branch"] = new_branch
+        if new_remote_file:
+            partial["remote_file"] = new_remote_file
+            puts(colored.yellow(f"[SYNC] remote_file aggiornato → '{new_remote_file}'. Il prossimo push creerà questo file nel repo remoto."))
 
         self._context_manager.update_sync_config(name, partial)
         puts(colored.green(f"[CTX] Config sync di '{name}' aggiornata."))
