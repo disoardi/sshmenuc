@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-26
+
+### Added
+
+#### Context Management from UI (`[c]` key)
+- **New `[c]` key** in the menu: opens a context management panel (visible only in multi-context mode)
+  - **Add a new context**: interactive wizard (same as `--add-context`) without leaving the app
+    - Configure remote URL, branch, remote file, local repo path
+    - Optionally trigger an immediate first encrypted push
+    - Offer to switch to the new context immediately after creation
+  - **Edit sync config** of any existing context (active or not):
+    - Change `remote_url` and/or `branch` interactively
+    - If editing the active context, the SyncManager is reinitialized in-session immediately
+- **`[c]manage`** label added to the menu instruction bar alongside `[x]ctx:NAME`
+
+### Refactored
+- `_add_context_wizard()` extracted from `main.py` into `sshmenuc/contexts/wizard.py` as `add_context_wizard()`
+  - `main.py` now imports from `wizard.py` (no functional change for CLI users)
+  - `navigation.py` can now call `add_context_wizard()` without circular imports
+- `_switch_to_context(name)` extracted from `_handle_context_switch()` into a reusable private method
+  - Reused by both `[x]` (switch) and `[c]` (new context → offer switch)
+
+### Added to ContextManager
+- `update_sync_config(name, partial_cfg)`: merge-updates sync fields (e.g. `remote_url`, `branch`) of a context without touching metadata like `last_sync` and `last_config_hash`
+
 ## [1.2.0] - 2026-02-20
 
 ### Added

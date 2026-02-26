@@ -28,7 +28,7 @@ class MenuDisplay:
         """
         line = "Navigate: ↑↓  Select: SPACE  Connect: ENTER  |  Edit: [a]dd [e]dit [d]elete [r]ename  |  [s]ync"
         if context_label:
-            line += f"  [x]ctx:{context_label}"
+            line += f"  [x]ctx:{context_label}  [c]manage"
         line += "  |  Quit: q"
         if sync_label:
             line += f"  [{sync_label}]"
