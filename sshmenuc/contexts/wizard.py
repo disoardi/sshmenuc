@@ -67,6 +67,13 @@ def add_context_wizard(name: str, default_config_path: str = "") -> bool:
     if not os.path.isfile(config_file) and default_config_path and os.path.isfile(default_config_path):
         shutil.copy2(default_config_path, config_file)
         print(f"  Config importato da {default_config_path}")
+        del_src = input(f"  Eliminare il file sorgente? [S/n]: ").strip().lower()
+        if del_src != "n":
+            try:
+                os.unlink(default_config_path)
+                print("  File sorgente eliminato.")
+            except OSError as e:
+                print(f"  Impossibile eliminare il file: {e}")
 
     # Offer immediate first push
     answer = input("\nEseguire subito la prima sincronizzazione (push)? [s/N]: ").strip().lower()

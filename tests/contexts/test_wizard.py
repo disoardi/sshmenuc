@@ -81,8 +81,8 @@ class TestAddContextWizard:
             args_config=legacy_config,
             contexts_path=contexts_path,
             cache_dir=cache_dir,
-            # remote_url, branch, remote_file, sync_repo_path, skip push
-            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n"],
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (n), skip push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n", "n"],
         )
 
         assert result is True
@@ -118,7 +118,8 @@ class TestAddContextWizard:
             args_config=legacy_config,
             contexts_path=contexts_path,
             cache_dir=cache_dir,
-            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n"],
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (n), skip push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n", "n"],
         )
 
         assert result is True
@@ -138,7 +139,8 @@ class TestAddContextWizard:
             args_config=legacy_config,
             contexts_path=contexts_path,
             cache_dir=cache_dir,
-            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n"],
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (n), skip push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n", "n"],
         )
 
         expected = os.path.join(cache_dir, "personal", "config.json")
@@ -175,7 +177,8 @@ class TestAddContextWizard:
             args_config=legacy_config,
             contexts_path=contexts_path,
             cache_dir=cache_dir,
-            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "s"],
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (n), do push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n", "s"],
         )
 
         mock_enc.assert_called_once()
@@ -192,8 +195,47 @@ class TestAddContextWizard:
             args_config=nonexistent_config,
             contexts_path=contexts_path,
             cache_dir=cache_dir,
+            # No delete prompt here: file doesn't exist, so copy step is skipped
             inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "s"],
         )
 
         mock_push.assert_not_called()
         mock_enc.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # Source file deletion after import
+    # ------------------------------------------------------------------
+
+    def test_import_deletes_source_when_confirmed(self, tmp_path, legacy_config):
+        """Wizard deletes the source plaintext file when user confirms deletion."""
+        contexts_path = str(tmp_path / "contexts.json")
+        cache_dir = str(tmp_path / "contexts")
+
+        assert os.path.isfile(legacy_config)
+
+        self._run_wizard(
+            name="personal",
+            args_config=legacy_config,
+            contexts_path=contexts_path,
+            cache_dir=cache_dir,
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (S), skip push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "s", "n"],
+        )
+
+        assert not os.path.isfile(legacy_config), "Source file should be deleted when user confirms"
+
+    def test_import_keeps_source_when_declined(self, tmp_path, legacy_config):
+        """Wizard keeps the source plaintext file when user declines deletion."""
+        contexts_path = str(tmp_path / "contexts.json")
+        cache_dir = str(tmp_path / "contexts")
+
+        self._run_wizard(
+            name="personal",
+            args_config=legacy_config,
+            contexts_path=contexts_path,
+            cache_dir=cache_dir,
+            # remote_url, branch, remote_file, sync_repo_path, delete-source (n), skip push
+            inputs=["git@github.com:user/cfg.git", "main", "personal.enc", "", "n", "n"],
+        )
+
+        assert os.path.isfile(legacy_config), "Source file should be kept when user declines"

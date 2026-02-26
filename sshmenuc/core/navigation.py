@@ -581,14 +581,14 @@ class ConnectionNavigator(BaseSSHMenuC):
         input("\nPress Enter to continue...")
 
     def _handle_context_manage(self) -> None:
-        """Handle 'c' key - Add a new context or edit the sync config of an existing one."""
+        """Handle 'c' key - Add a new context or manage an existing one."""
         names = self._context_manager.list_contexts()
 
         puts(colored.cyan("\n=== Gestione Contesti ==="))
         puts(colored.white("  [1] Nuovo contesto"))
         for i, name in enumerate(names, 2):
             marker = " *" if name == self._active_context else ""
-            puts(colored.white(f"  [{i}] Modifica sync: {name}{marker}"))
+            puts(colored.white(f"  [{i}] {name}{marker}"))
         puts(colored.white("\n[Invio] Annulla"))
 
         raw = input("> ").strip()
@@ -605,7 +605,110 @@ class ConnectionNavigator(BaseSSHMenuC):
             return
 
         if 0 <= idx < len(names):
-            self._handle_edit_context_sync(names[idx])
+            self._handle_context_actions(names[idx])
+
+    def _handle_context_actions(self, name: str) -> None:
+        """Sub-menu for a selected context: edit sync params or reimport from plaintext."""
+        marker = " *" if name == self._active_context else ""
+        puts(colored.cyan(f"\n--- {name}{marker} ---"))
+        puts(colored.white("  [m] Modifica parametri sync"))
+        puts(colored.white("  [i] Reimport da file in chiaro"))
+        puts(colored.white("\n[Invio] Annulla"))
+
+        choice = input("> ").strip().lower()
+        if choice == "m":
+            self._handle_edit_context_sync(name)
+        elif choice == "i":
+            self._handle_reimport_context(name)
+
+    def _handle_reimport_context(self, name: str) -> None:
+        """Reimport config from a plaintext JSON file into the context's encrypted store.
+
+        Reads a JSON file, encrypts it with the cached passphrase, writes the
+        local .enc backup, updates contexts.json metadata, and optionally pushes
+        to the remote repo.  Offers to delete the source plaintext file (default: yes).
+        """
+        import hashlib as _hashlib
+        import json as _json
+        from datetime import datetime, timezone
+        from ..sync.crypto import encrypt_config
+        from ..sync.passphrase_cache import get_or_prompt
+        from ..sync.git_remote import ensure_repo_initialized, push_remote
+
+        puts(colored.cyan(f"\n--- Reimport config: {name} ---"))
+
+        src_path = input("Percorso file in chiaro (JSON): ").strip()
+        if not src_path:
+            return
+
+        src_path = os.path.expanduser(src_path)
+        if not os.path.isfile(src_path):
+            puts(colored.red(f"[ERR] File non trovato: {src_path}"))
+            input("\nPress Enter to continue...")
+            return
+
+        try:
+            with open(src_path, "r") as f:
+                config_data = _json.load(f)
+        except (ValueError, OSError) as e:
+            puts(colored.red(f"[ERR] Impossibile leggere il file: {e}"))
+            input("\nPress Enter to continue...")
+            return
+
+        try:
+            passphrase = get_or_prompt("Passphrase sync: ")
+            enc_bytes = encrypt_config(config_data, passphrase)
+        except Exception as e:
+            puts(colored.red(f"[ERR] Cifratura fallita: {e}"))
+            input("\nPress Enter to continue...")
+            return
+
+        # Save .enc locally
+        enc_path = self._context_manager.get_enc_file(name)
+        self._context_manager.ensure_context_dir(name)
+        with open(enc_path, "wb") as f:
+            f.write(enc_bytes)
+
+        # Compute hash consistent with _hash_config_file() (uses json.dumps indent=4)
+        content_hash = _hashlib.sha256(
+            _json.dumps(config_data, indent=4).encode()
+        ).hexdigest()
+        self._context_manager.update_context_meta(
+            name,
+            datetime.now(timezone.utc).isoformat(),
+            content_hash,
+        )
+
+        # If this is the active context, update in-memory state immediately
+        if name == self._active_context:
+            self.sync_manager._config_data = config_data
+            self.sync_manager._sync_cfg["last_config_hash"] = content_hash
+            self.set_config(config_data)
+            self.config_manager.set_config(config_data)
+            puts(colored.green(f"[CTX] Config '{name}' ricaricata in memoria."))
+        else:
+            puts(colored.green(f"[CTX] Backup cifrato aggiornato per '{name}'."))
+
+        # Offer to delete source file (default: yes)
+        del_src = input(f"\nEliminare il file sorgente? [S/n]: ").strip().lower()
+        if del_src != "n":
+            try:
+                os.unlink(src_path)
+                puts(colored.yellow("[CTX] File sorgente eliminato."))
+            except OSError as e:
+                puts(colored.yellow(f"[CTX] Non riesco a eliminare il file: {e}"))
+
+        # Offer push to remote
+        sync_cfg = self._context_manager.get_sync_cfg(name)
+        if sync_cfg.get("remote_url"):
+            push_now = input("\nEseguire subito un push verso il repo remoto? [S/n]: ").strip().lower()
+            if push_now != "n":
+                if ensure_repo_initialized(sync_cfg) and push_remote(sync_cfg, enc_bytes):
+                    puts(colored.green("[SYNC] Push completato."))
+                else:
+                    puts(colored.yellow("[SYNC] Push fallito. Backup locale cifrato comunque aggiornato."))
+
+        input("\nPress Enter to continue...")
 
     def _handle_new_context(self) -> None:
         """Wizard to create a new context from within the running app."""
