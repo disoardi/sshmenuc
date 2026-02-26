@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-02-26
+
+### Fixed
+- `[c]` → "Modifica sync": aggiunto campo `remote_file` come campo modificabile interattivamente
+  - Consente di correggere il nome del file remoto (es. da `config.json.enc` a `isp.enc`) senza editare `contexts.json` a mano
+  - Il file precedente nel repo remoto non viene rimosso automaticamente (farlo manualmente con `git rm`)
+
 ## [1.3.0] - 2026-02-26
 
 ### Added

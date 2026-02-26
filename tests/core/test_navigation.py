@@ -341,11 +341,11 @@ class TestContextManagement:
     # ------------------------------------------------------------------
 
     def test_edit_context_sync_no_changes_on_empty_input(self, temp_config_file):
-        """No update when user presses Enter for both fields."""
+        """No update when user presses Enter for all three fields."""
         nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
 
-        # Both new_url and new_branch empty → no update
-        with patch("builtins.input", side_effect=["", "", ""]):
+        # url, branch, remote_file all empty → no update; last "" is Enter to continue
+        with patch("builtins.input", side_effect=["", "", "", ""]):
             nav._handle_edit_context_sync("isp")
 
         ctx_mgr.update_sync_config.assert_not_called()
@@ -355,7 +355,8 @@ class TestContextManagement:
         nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
         nav._active_context = "home"  # "isp" is not active
 
-        with patch("builtins.input", side_effect=["git@github.com:new/repo.git", "", ""]):
+        # url, branch (empty), remote_file (empty), Enter to continue
+        with patch("builtins.input", side_effect=["git@github.com:new/repo.git", "", "", ""]):
             nav._handle_edit_context_sync("isp")
 
         ctx_mgr.update_sync_config.assert_called_once_with(
@@ -363,21 +364,32 @@ class TestContextManagement:
         )
 
     def test_edit_context_sync_updates_only_branch(self, temp_config_file):
-        """Only branch is updated when URL field is left empty."""
+        """Only branch is updated when URL and remote_file fields are left empty."""
         nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
         nav._active_context = "home"
 
-        with patch("builtins.input", side_effect=["", "develop", ""]):
+        with patch("builtins.input", side_effect=["", "develop", "", ""]):
             nav._handle_edit_context_sync("isp")
 
         ctx_mgr.update_sync_config.assert_called_once_with("isp", {"branch": "develop"})
+
+    def test_edit_context_sync_updates_remote_file(self, temp_config_file):
+        """remote_file is updated when provided; other fields left empty."""
+        nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
+        nav._active_context = "home"
+
+        with patch("builtins.input", side_effect=["", "", "isp.enc", ""]):
+            nav._handle_edit_context_sync("isp")
+
+        ctx_mgr.update_sync_config.assert_called_once_with("isp", {"remote_file": "isp.enc"})
 
     def test_edit_active_context_sync_reinitializes_sync_manager(self, temp_config_file):
         """Editing the active context reinitializes the SyncManager in-session."""
         nav, ctx_mgr = self._make_navigator_with_context_manager(temp_config_file)
         old_sm = nav.sync_manager
 
-        with patch("builtins.input", side_effect=["git@github.com:new/repo.git", "", ""]), \
+        # url, branch (empty), remote_file (empty), Enter to continue
+        with patch("builtins.input", side_effect=["git@github.com:new/repo.git", "", "", ""]), \
              patch("sshmenuc.core.navigation.SyncManager") as MockSM:
             MockSM.return_value = MagicMock()
             nav._handle_edit_context_sync("home")  # "home" is the active context
