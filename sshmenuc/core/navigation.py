@@ -55,7 +55,9 @@ class ConnectionNavigator(BaseSSHMenuC):
         state = self.sync_manager.startup_pull()
         data = self.sync_manager.get_config_data()
         if data is not None:
-            # Zero-plaintext mode: config is in memory, set directly without file I/O
+            # Zero-plaintext mode: config is in memory, set directly without file I/O.
+            # Normalize old-format (no "targets" key) data that may come from legacy .enc files.
+            data = self._normalize_config(data)
             self.set_config(data)
             self.config_manager.set_config(data)
         elif state == SyncState.SYNC_OK:
@@ -527,6 +529,7 @@ class ConnectionNavigator(BaseSSHMenuC):
         self._wire_encrypted_io()
         data = self.sync_manager.get_config_data()
         if data is not None:
+            data = self._normalize_config(data)
             self.set_config(data)
             self.config_manager.set_config(data)
         else:
@@ -683,8 +686,8 @@ class ConnectionNavigator(BaseSSHMenuC):
         if name == self._active_context:
             self.sync_manager._config_data = config_data
             self.sync_manager._sync_cfg["last_config_hash"] = content_hash
-            self.set_config(config_data)
-            self.config_manager.set_config(config_data)
+            self.set_config(self._normalize_config(config_data))
+            self.config_manager.set_config(self._normalize_config(config_data))
             puts(colored.green(f"[CTX] Config '{name}' ricaricata in memoria."))
         else:
             puts(colored.green(f"[CTX] Backup cifrato aggiornato per '{name}'."))

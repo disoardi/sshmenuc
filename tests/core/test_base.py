@@ -78,3 +78,47 @@ class TestBaseSSHMenuC:
         
         base.config_data = "invalid"
         assert base.validate_config() is False
+
+    def test_normalize_config_old_format(self):
+        """Test _normalize_config converts old-format (no targets key) to new format."""
+        old_fmt = {
+            "Casa": [{"friendly": "router", "host": "192.168.1.1"}],
+            "DXC": [{"friendly": "server", "host": "10.0.0.1"}],
+        }
+        result = ConcreteBaseSSHMenuC._normalize_config(old_fmt)
+        assert "targets" in result
+        assert len(result["targets"]) == 2
+        # Keys preserved under targets
+        keys = {list(t.keys())[0] for t in result["targets"]}
+        assert keys == {"Casa", "DXC"}
+
+    def test_normalize_config_new_format_unchanged(self):
+        """Test _normalize_config leaves new-format (has targets key) untouched."""
+        new_fmt = {"targets": [{"Casa": [{"friendly": "router", "host": "192.168.1.1"}]}]}
+        result = ConcreteBaseSSHMenuC._normalize_config(new_fmt)
+        assert result == new_fmt
+
+    def test_normalize_config_empty_dict(self):
+        """Test _normalize_config with empty dict produces empty targets list."""
+        result = ConcreteBaseSSHMenuC._normalize_config({})
+        assert result == {"targets": []}
+
+    def test_load_config_encrypted_path_old_format(self):
+        """Test load_config normalizes old-format data returned by _encrypted_load hook."""
+        base = ConcreteBaseSSHMenuC()
+        old_fmt = {
+            "Casa": [{"friendly": "router", "host": "192.168.1.1"}],
+        }
+        base._encrypted_load = lambda: old_fmt
+        base.load_config()
+        assert "targets" in base.config_data
+        assert len(base.config_data["targets"]) == 1
+        assert list(base.config_data["targets"][0].keys())[0] == "Casa"
+
+    def test_load_config_encrypted_path_new_format(self):
+        """Test load_config leaves new-format data from _encrypted_load hook unchanged."""
+        base = ConcreteBaseSSHMenuC()
+        new_fmt = {"targets": [{"Casa": [{"friendly": "router", "host": "192.168.1.1"}]}]}
+        base._encrypted_load = lambda: new_fmt
+        base.load_config()
+        assert base.config_data == new_fmt
