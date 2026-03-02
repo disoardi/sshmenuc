@@ -28,6 +28,17 @@ class BaseSSHMenuC(ABC):
         if not logging.getLogger().handlers:
             logging.basicConfig(level=logging.INFO)
     
+    @staticmethod
+    def _normalize_config(data: dict) -> dict:
+        """Convert old-format config (no 'targets' key) to targets-array format.
+
+        Old format: {"GroupName": [...], ...}
+        New format: {"targets": [{"GroupName": [...]}, ...]}
+        """
+        if isinstance(data, dict) and "targets" not in data:
+            return {"targets": [{k: v} for k, v in data.items()]}
+        return data
+
     def load_config(self):
         """Load and normalize the configuration file.
 
@@ -38,7 +49,7 @@ class BaseSSHMenuC(ABC):
         if self._encrypted_load is not None:
             data = self._encrypted_load()
             if data is not None:
-                self.config_data = data
+                self.config_data = self._normalize_config(data)
                 self._validate_host_entries()
                 return
             # If encrypted load returns None (not ready yet), fall through to plaintext

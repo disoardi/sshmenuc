@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Menu vuoto dopo sync con config in formato vecchio**: quando un file `.enc` era stato creato
+  prima dell'introduzione del formato `targets` (v1.2.0), la decifratura restituiva dati in formato
+  vecchio (`{"GroupName": [...]}`) che venivano memorizzati senza normalizzazione. `get_node()`
+  cercava la chiave `"targets"` non trovandola → menu sempre vuoto. Fix: aggiunta
+  `_normalize_config()` in `BaseSSHMenuC` chiamata in tutti i punti in cui dati cifrati vengono
+  caricati in memoria (`load_config()` encrypted path, `_run_startup_pull()`, `_switch_to_context()`,
+  `_handle_reimport_context()`).
+
 ## [1.3.3] - 2026-02-26
 
 ### Added

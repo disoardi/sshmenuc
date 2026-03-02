@@ -534,3 +534,65 @@ class TestContextManagement:
 
         mock_init.assert_called_once()
         mock_push.assert_called_once()
+
+
+class TestOldFormatNormalization:
+    """Tests that old-format config (no 'targets' key) is normalized when loaded
+    via the encrypted path, so the menu is never empty after a sync.
+
+    Regression test for: config.json.enc created before multi-context mode
+    contained old-format data; after decryption set_config() stored it without
+    normalizing, causing get_node() to return an empty dict.
+    """
+
+    OLD_FORMAT = {
+        "Casa": [{"friendly": "router", "host": "192.168.1.1", "user": "admin"}],
+        "DXC": [{"friendly": "server", "host": "10.0.0.1", "user": "user"}],
+    }
+
+    def test_run_startup_pull_normalizes_old_format(self, temp_config_file):
+        """_run_startup_pull normalizes old-format data returned by SyncManager."""
+        from sshmenuc.sync import SyncState
+
+        mock_sm = MagicMock()
+        mock_sm.startup_pull.return_value = SyncState.SYNC_OK
+        mock_sm.get_config_data.return_value = dict(self.OLD_FORMAT)
+        mock_sm._sync_cfg = {}
+
+        with patch("sshmenuc.core.navigation.SyncManager", return_value=mock_sm):
+            nav = ConnectionNavigator(temp_config_file)
+
+        assert "targets" in nav.config_data
+        assert len(nav.config_data["targets"]) == 2
+        # get_node() must return non-empty dict
+        root = nav.get_node([])
+        assert isinstance(root, dict)
+        assert "Casa" in root and "DXC" in root
+
+    def test_switch_to_context_normalizes_old_format(self, temp_config_file):
+        """_switch_to_context normalizes old-format data from the new SyncManager."""
+        from sshmenuc.sync import SyncState
+
+        ctx_mgr = MagicMock()
+        ctx_mgr.list_contexts.return_value = ["home", "work"]
+        ctx_mgr.get_sync_cfg.return_value = {"auto_pull": True}
+        ctx_mgr.get_config_file.return_value = temp_config_file
+
+        nav = ConnectionNavigator(
+            temp_config_file,
+            context_manager=ctx_mgr,
+            active_context="home",
+        )
+
+        mock_sm = MagicMock()
+        mock_sm.startup_pull.return_value = SyncState.SYNC_OK
+        mock_sm.get_config_data.return_value = dict(self.OLD_FORMAT)
+        mock_sm._sync_cfg = {}
+
+        with patch("sshmenuc.core.navigation.SyncManager", return_value=mock_sm):
+            result = nav._switch_to_context("work")
+
+        assert result is True
+        assert "targets" in nav.config_data
+        root = nav.get_node([])
+        assert "Casa" in root and "DXC" in root
