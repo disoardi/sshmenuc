@@ -278,6 +278,73 @@ poetry install
 pip install -e .
 ```
 
+### Installazione via Docker
+
+Se non vuoi installare Python e dipendenze, puoi usare l'immagine Docker:
+
+```bash
+# Build locale
+docker build -t sshmenuc .
+
+# Oppure pull da GitHub Container Registry (quando pubblicata)
+docker pull ghcr.io/disoardi/sshmenuc
+```
+
+Avvio con mount del config e delle chiavi SSH:
+
+```bash
+docker run --rm -it \
+  -v ~/.config/sshmenuc:/root/.config/sshmenuc \
+  -v ~/.ssh:/root/.ssh:ro \
+  sshmenuc
+```
+
+Per comodità, aggiungi questo alias al tuo `.bashrc` / `.zshrc`:
+
+```bash
+alias sshmenuc='docker run --rm -it \
+  -v ~/.config/sshmenuc:/root/.config/sshmenuc \
+  -v ~/.ssh:/root/.ssh:ro \
+  sshmenuc'
+```
+
+#### SSH agent forwarding (chiavi con passphrase)
+
+Se le tue chiavi SSH sono protette da passphrase e usi `ssh-agent`, monta il socket dell'agent per evitare di reinserire la passphrase ad ogni connessione:
+
+```bash
+docker run --rm -it \
+  -v ~/.config/sshmenuc:/root/.config/sshmenuc \
+  -v ~/.ssh:/root/.ssh:ro \
+  -v "$SSH_AUTH_SOCK":/tmp/ssh-auth.sock \
+  -e SSH_AUTH_SOCK=/tmp/ssh-auth.sock \
+  sshmenuc
+```
+
+Alias completo con agent forwarding:
+
+```bash
+alias sshmenuc='docker run --rm -it \
+  -v ~/.config/sshmenuc:/root/.config/sshmenuc \
+  -v ~/.ssh:/root/.ssh:ro \
+  ${SSH_AUTH_SOCK:+-v "$SSH_AUTH_SOCK":/tmp/ssh-auth.sock -e SSH_AUTH_SOCK=/tmp/ssh-auth.sock} \
+  sshmenuc'
+```
+
+> Questo alias monta il socket dell'agent solo se `SSH_AUTH_SOCK` è definito, ed è quindi compatibile con ambienti senza agent attivo.
+
+#### Connessioni di tipo Docker
+
+Se utilizzi connection type `docker` nella config per connetterti a container locali, aggiungi il mount del socket Docker:
+
+```bash
+docker run --rm -it \
+  -v ~/.config/sshmenuc:/root/.config/sshmenuc \
+  -v ~/.ssh:/root/.ssh:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  sshmenuc
+```
+
 ### Development with Poetry
 
 1. Install Poetry: https://python-poetry.org/docs/#installation
