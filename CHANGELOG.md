@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.4] - 2026-05-22
+
+### Added
+- **Dockerfile per distribuzione**: immagine basata su `python:3.12-slim` con `openssh-client`
+  e `git`. Alternativa a `pip install sshmenuc` per chi non vuole installare Python localmente.
+- **SSH agent forwarding documentato**: il README include istruzioni e alias per montare il
+  socket `SSH_AUTH_SOCK` nel container, con supporto condizionale per ambienti senza agent attivo.
+- **Docker socket mount documentato**: istruzioni per usare connection type `docker` dal container.
 
 ### Fixed
 - **Menu vuoto dopo sync con config in formato vecchio**: quando un file `.enc` era stato creato
