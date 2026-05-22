@@ -274,12 +274,32 @@ Before publishing to PyPI:
    - Verify `publish-pypi.yml` trigger conditions
    - Test manual trigger: `gh workflow run publish-pypi.yml`
 
+### PyPI Workflow Trigger
+
+Il workflow `publish-pypi.yml` si scatena su `release: types: [published]` — **non basta il push del tag**.
+Dopo il push del tag occorre creare esplicitamente la GitHub Release:
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."
+```
+
+### Aggiornamento tuxbox-registry-public
+
+Ad ogni release, aggiornare `~/Progetti/tuxbox-registry-public/tools.toml`:
+```bash
+cd ~/Progetti/tuxbox-registry-public
+git pull origin main          # sempre prima di modificare — altri strumenti aggiornano il file
+# aggiornare version = "X.Y.Z"
+git add tools.toml && git commit -m "aggiorna sshmenuc a vX.Y.Z"
+git push origin main
+```
+
 ### Post-Release Verification
 
 - ✅ **GitHub Release**: https://github.com/USER/REPO/releases/tag/vX.Y.Z
 - ✅ **Package published**: https://pypi.org/project/PACKAGE/X.Y.Z/ (or npm)
 - ✅ **Documentation updated**: Check docs site if applicable
 - ✅ **Assets included**: Verify wheel/tarball or other artifacts
+- ✅ **tuxbox-registry-public**: `tools.toml` aggiornato e pushato
 
 ### Rollback (if needed)
 
