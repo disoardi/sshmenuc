@@ -120,8 +120,8 @@ class ConnectionNavigator(BaseSSHMenuC):
         Handles keyboard input for menu navigation:
         - Arrow keys: Move selection up/down/left/right
         - Space: Toggle selection for multi-host connection
-        - Enter: Launch connection(s)
-        - q: Quit application
+        - Enter: Navigate into sub-menu or launch connection(s)
+        - q: Quit application (requires y/Y confirmation)
         """
         current_path = []
         selected_target = 0
@@ -132,7 +132,9 @@ class ConnectionNavigator(BaseSSHMenuC):
             key = readchar.readkey()
             
             if key == "q":
-                break
+                confirm = readchar.readkey()
+                if confirm in ("y", "Y"):
+                    break
             elif key == readchar.key.DOWN:
                 if selected_target < num_targets - 1 or num_targets == 0:
                     selected_target += 1
@@ -146,7 +148,10 @@ class ConnectionNavigator(BaseSSHMenuC):
             elif key == " ":
                 self._handle_selection(current_path, selected_target)
             elif key == readchar.key.ENTER:
+                prev_path = list(current_path)
                 self._handle_enter(current_path, selected_target)
+                if current_path != prev_path:
+                    selected_target = 0
             elif key == "a":
                 self._handle_add(current_path, selected_target)
             elif key == "e":

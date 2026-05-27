@@ -1,10 +1,33 @@
 """
 Interactive navigation tests with mocked input.
 """
+import json
+import os
+import tempfile
 import pytest
 from unittest.mock import patch, MagicMock, call
 import readchar
 from sshmenuc.core.navigation import ConnectionNavigator
+
+
+@pytest.fixture
+def multi_category_config_file():
+    """Config with 3 categories to allow navigating past index 0."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        config_data = {
+            "targets": [
+                {"Alpha": [{"friendly": "a1", "host": "a1.example.com", "user": "u"}]},
+                {"Beta":  [{"friendly": "b1", "host": "b1.example.com", "user": "u"}]},
+                {"Gamma": [{"friendly": "g1", "host": "g1.example.com", "user": "u"}]},
+            ]
+        }
+        json.dump(config_data, f, indent=2)
+        temp_path = f.name
+
+    yield temp_path
+
+    if os.path.exists(temp_path):
+        os.unlink(temp_path)
 
 
 class TestNavigationInteractive:
@@ -13,8 +36,8 @@ class TestNavigationInteractive:
     @patch('readchar.readkey')
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_quit_key(self, mock_print_menu, mock_readkey, temp_config_file):
-        """Test navigation exits on 'q' key."""
-        mock_readkey.return_value = 'q'
+        """Test navigation exits on 'q' key confirmed with 'y'."""
+        mock_readkey.side_effect = ['q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -24,7 +47,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_down_key(self, mock_print_menu, mock_readkey, temp_config_file):
         """Test navigation handles DOWN key."""
-        mock_readkey.side_effect = [readchar.key.DOWN, readchar.key.DOWN, 'q']
+        mock_readkey.side_effect = [readchar.key.DOWN, readchar.key.DOWN, 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -34,7 +57,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_up_key(self, mock_print_menu, mock_readkey, temp_config_file):
         """Test navigation handles UP key."""
-        mock_readkey.side_effect = [readchar.key.UP, 'q']
+        mock_readkey.side_effect = [readchar.key.UP, 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -44,7 +67,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_left_key(self, mock_print_menu, mock_readkey, temp_config_file):
         """Test navigation handles LEFT key."""
-        mock_readkey.side_effect = [readchar.key.LEFT, 'q']
+        mock_readkey.side_effect = [readchar.key.LEFT, 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -56,7 +79,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_space_key(self, mock_print_menu, mock_handle_selection, mock_readkey, temp_config_file):
         """Test navigation handles SPACE key for selection."""
-        mock_readkey.side_effect = [' ', 'q']
+        mock_readkey.side_effect = [' ', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -67,7 +90,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_enter_key(self, mock_print_menu, mock_handle_enter, mock_readkey, temp_config_file):
         """Test navigation handles ENTER key."""
-        mock_readkey.side_effect = [readchar.key.ENTER, 'q']
+        mock_readkey.side_effect = [readchar.key.ENTER, 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -78,7 +101,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_add_key(self, mock_print_menu, mock_handle_add, mock_readkey, temp_config_file):
         """Test navigation handles 'a' key for add."""
-        mock_readkey.side_effect = ['a', 'q']
+        mock_readkey.side_effect = ['a', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -89,7 +112,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_edit_key(self, mock_print_menu, mock_handle_edit, mock_readkey, temp_config_file):
         """Test navigation handles 'e' key for edit."""
-        mock_readkey.side_effect = ['e', 'q']
+        mock_readkey.side_effect = ['e', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -100,7 +123,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_delete_key(self, mock_print_menu, mock_handle_delete, mock_readkey, temp_config_file):
         """Test navigation handles 'd' key for delete."""
-        mock_readkey.side_effect = ['d', 'q']
+        mock_readkey.side_effect = ['d', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -111,7 +134,7 @@ class TestNavigationInteractive:
     @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
     def test_navigate_rename_key(self, mock_print_menu, mock_handle_rename, mock_readkey, temp_config_file):
         """Test navigation handles 'r' key for rename."""
-        mock_readkey.side_effect = ['r', 'q']
+        mock_readkey.side_effect = ['r', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
 
@@ -145,3 +168,93 @@ class TestNavigationInteractive:
         mock_launch_group.assert_called_once()
         # Check that marked_indices is cleared
         assert len(navigator.marked_indices) == 0
+
+
+class TestCursorReset:
+    """Tests for issue #3: cursor must reset to 0 when entering a sub-menu."""
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_cursor_resets_to_zero_after_entering_submenu(
+        self, mock_print_menu, mock_readkey, multi_category_config_file
+    ):
+        """Entering a sub-menu via ENTER must reset selected_target to 0.
+
+        Steps: DOWN x2 (cursor at 2) → ENTER (navigate to Gamma) → q
+        The print_menu call AFTER navigation must be invoked with selected_target=0.
+        """
+        mock_readkey.side_effect = [
+            readchar.key.DOWN,   # cursor → 1
+            readchar.key.DOWN,   # cursor → 2
+            readchar.key.ENTER,  # enter Gamma group (path = [2])
+            'q', 'y',            # exit with confirmation
+        ]
+        navigator = ConnectionNavigator(multi_category_config_file)
+        navigator.navigate()
+
+        # print_menu is called at the TOP of each loop iteration.
+        # Calls: (0,[]) → (1,[]) → (2,[]) → (AFTER ENTER: must be 0,[2]) → exits on q
+        calls = mock_print_menu.call_args_list
+        assert len(calls) == 4
+        # The 4th call (index 3) is the first render inside the sub-menu — cursor MUST be 0
+        selected_after_enter = calls[3][0][0]  # positional arg 0 of 4th call
+        assert selected_after_enter == 0, (
+            f"Expected cursor=0 after entering sub-menu, got {selected_after_enter}"
+        )
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_cursor_at_zero_unaffected_by_enter(
+        self, mock_print_menu, mock_readkey, multi_category_config_file
+    ):
+        """When cursor is already at 0 and ENTER is pressed, cursor stays 0 after navigation."""
+        mock_readkey.side_effect = [
+            readchar.key.ENTER,  # enter Alpha group (cursor was 0, path = [0])
+            'q', 'y',
+        ]
+        navigator = ConnectionNavigator(multi_category_config_file)
+        navigator.navigate()
+
+        calls = mock_print_menu.call_args_list
+        assert len(calls) == 2
+        selected_after_enter = calls[1][0][0]
+        assert selected_after_enter == 0
+
+
+class TestQuitConfirmation:
+    """Tests for issue #4: pressing q must ask for confirmation before exiting."""
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_quit_confirmed_with_y(self, mock_print_menu, mock_readkey, temp_config_file):
+        """Pressing q then y should exit: readkey must be called twice (q + confirmation)."""
+        mock_readkey.side_effect = ['q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+        # readkey must be called twice: once for 'q', once to read the confirmation key
+        assert mock_readkey.call_count == 2
+        mock_print_menu.assert_called_once()
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_quit_cancelled_with_n_stays_in_menu(
+        self, mock_print_menu, mock_readkey, temp_config_file
+    ):
+        """Pressing q then n should cancel the exit and remain in the navigation loop."""
+        mock_readkey.side_effect = ['q', 'n', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+        # print_menu is called twice: once before q-n (cancel), once before q-y (confirm)
+        assert mock_print_menu.call_count == 2
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_quit_confirmed_with_uppercase_Y(
+        self, mock_print_menu, mock_readkey, temp_config_file
+    ):
+        """Pressing q then Y (uppercase) should also exit: readkey called twice."""
+        mock_readkey.side_effect = ['q', 'Y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+        assert mock_readkey.call_count == 2
+        mock_print_menu.assert_called_once()
