@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-05-27
+
+### Fixed
+- **Cursore resettato a 0 all'entrata in sotto-menu**: navigando nel menu principale fino a un
+  indice N e premendo ENTER, il cursore nel sotto-menu partiva da N invece che da 0. Fix: il loop
+  di navigazione confronta `current_path` prima e dopo `_handle_enter()`; se il path è cambiato,
+  `selected_target` viene azzerato. Chiude [#3].
+- **Conferma prima di uscire con `q`**: premendo `q` l'applicazione usciva immediatamente senza
+  conferma, con rischio di uscita accidentale. Ora viene mostrato un prompt `[y/N]`; esce solo
+  premendo `y` o `Y`, qualsiasi altro tasto annulla e rimane nel menu. Chiude [#4].
+
 ## [1.3.4] - 2026-05-22
 
 ### Added
