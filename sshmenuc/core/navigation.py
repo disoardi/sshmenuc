@@ -132,6 +132,11 @@ class ConnectionNavigator(BaseSSHMenuC):
             key = readchar.readkey()
             
             if key == "q":
+                sync_active = bool(self.sync_manager._sync_cfg.get("remote_url"))
+                prompt = "Uscire? [y/N]"
+                if sync_active:
+                    prompt += " — al prossimo avvio verrà richiesta la password di decrypt"
+                puts(colored.yellow(prompt))
                 confirm = readchar.readkey()
                 if confirm in ("y", "Y"):
                     break

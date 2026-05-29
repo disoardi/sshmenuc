@@ -258,3 +258,47 @@ class TestQuitConfirmation:
         navigator.navigate()
         assert mock_readkey.call_count == 2
         mock_print_menu.assert_called_once()
+
+    @patch('sshmenuc.core.navigation.puts')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_quit_prints_prompt(self, mock_print_menu, mock_readkey, mock_puts, temp_config_file):
+        """Pressing q must display a visible confirmation prompt."""
+        mock_readkey.side_effect = ['q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+        # puts must be called at least once to show the prompt
+        assert mock_puts.called
+        # The prompt must contain 'Uscire?' and '[y/N]'
+        all_args = ' '.join(str(c) for c in mock_puts.call_args_list)
+        assert 'Uscire?' in all_args
+        assert '[y/N]' in all_args
+
+    @patch('sshmenuc.core.navigation.puts')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._run_startup_pull')
+    def test_quit_prompt_shows_decrypt_warning_when_sync_configured(
+        self, mock_startup, mock_print_menu, mock_readkey, mock_puts, temp_config_file
+    ):
+        """When sync is configured, quit prompt must warn about decrypt password on next startup."""
+        mock_readkey.side_effect = ['q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.sync_manager._sync_cfg = {"remote_url": "git@github.com:user/repo.git"}
+        navigator.navigate()
+        all_args = ' '.join(str(c) for c in mock_puts.call_args_list)
+        assert 'decrypt' in all_args.lower() or 'password' in all_args.lower()
+
+    @patch('sshmenuc.core.navigation.puts')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_quit_prompt_no_decrypt_warning_without_sync(
+        self, mock_print_menu, mock_readkey, mock_puts, temp_config_file
+    ):
+        """Without sync configured, the quit prompt must NOT mention decrypt/password."""
+        mock_readkey.side_effect = ['q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+        all_args = ' '.join(str(c) for c in mock_puts.call_args_list)
+        assert 'decrypt' not in all_args.lower()
+        assert 'password' not in all_args.lower()
