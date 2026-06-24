@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-24
+
+### Added
+- **Gerarchia N livelli nei menu** (#8): `add`, `delete`, `rename` ora operano a profondità
+  arbitraria. Navigando dentro un sottogruppo si può creare un ulteriore sotto-livello
+  (`[a]` chiede `[h]ost o [g]ruppo?`). Il breadcrumb "HDP > Prod > Admin" viene mostrato
+  sopra la tabella quando si è in profondità.
+- **Tag agli host** (#9): gli host supportano il campo opzionale `tags: [...]` visibile come
+  colonna nella tabella del menu principale. I form `add`/`edit` includono un prompt per
+  inserire i tag (separati da virgola).
+- **Ricerca incrementale con `/`** (#9): premendo `/` si entra in modalità ricerca fzf-style
+  (readchar). La query viene costruita carattere per carattere; i risultati vengono aggiornati
+  in tempo reale mostrando il breadcrumb e i tag. `ENTER` connette direttamente al risultato
+  selezionato, `ESC` torna al menu.
+
+### Fixed
+- **Sync non-fast-forward** (#7): `git_remote.py` distingue ora la divergenza di storia
+  (`PullStatus.CONFLICT`) dall'errore di rete (`PullStatus.OFFLINE`). `push_remote` ritenta
+  automaticamente con `git pull --rebase` dopo un rifiuto non-fast-forward prima di fallire.
+
 ## [1.3.7] - 2026-06-24
 
 ### Fixed
