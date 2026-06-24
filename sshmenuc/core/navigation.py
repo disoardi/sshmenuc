@@ -173,6 +173,8 @@ class ConnectionNavigator(BaseSSHMenuC):
                         self._handle_context_switch()
                     elif key == "c" and self._context_manager is not None:
                         self._handle_context_manage()
+                    elif key == "/":
+                        self._search_mode()
                 except KeyboardInterrupt:
                     pass  # Ctrl+C cancels the current operation, returns to menu
     
@@ -327,6 +329,28 @@ class ConnectionNavigator(BaseSSHMenuC):
                 raise TypeError(f"Unsupported type: {type(node)}")
         return node
     
+    def _build_breadcrumb(self, path: List[Any]) -> str:
+        """Build a human-readable path string for the current position.
+
+        Returns empty string at root, e.g. "HDP > Prod > Admin" at depth 3.
+        """
+        if not path:
+            return ""
+        parts = []
+        for depth in range(len(path)):
+            node = self.get_node(path[:depth])
+            idx = path[depth]
+            if isinstance(node, dict):
+                keys = list(node.keys())
+                if 0 <= idx < len(keys):
+                    parts.append(keys[idx])
+            elif isinstance(node, list):
+                if 0 <= idx < len(node):
+                    item = node[idx]
+                    if isinstance(item, dict) and "friendly" not in item and "host" not in item:
+                        parts.append(next(iter(item.keys()), "?"))
+        return " > ".join(parts)
+
     def count_elements(self, current_path: List[Any]) -> int:
         """Count elements in the current node.
 
@@ -384,51 +408,44 @@ class ConnectionNavigator(BaseSSHMenuC):
         logging.debug("current_node_type: %s", type(current_node))
         logging.debug("current_node: %s", current_node)
 
+        breadcrumb = self._build_breadcrumb(current_path)
+        if breadcrumb:
+            self.display.print_breadcrumb(breadcrumb)
+
         level = len(current_path) if isinstance(current_node, dict) else len(current_path) + 1
         self.display.print_table(current_node, selected_target, self.marked_indices, level)
 
     def _handle_add(self, current_path: List[Any], selected_target: int):
-        """Handle 'a' key - Add target or connection based on context."""
+        """Handle 'a' key - Add target, subgroup, or connection based on context."""
         node = self.get_node(current_path)
         if isinstance(node, dict) and not current_path:
             if self.editor.add_target():
                 self.load_config()
                 input("\nPress Enter to continue...")
         elif isinstance(node, list) and current_path:
-            targets = self.config_data.get("targets", [])
-            aggregated = {}
-            for t in targets:
-                if isinstance(t, dict):
-                    for k, v in t.items():
-                        aggregated[k] = v
-            target_keys = list(aggregated.keys())
-            if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
-                target_name = target_keys[current_path[0]]
-                if self.editor.add_connection(target_name):
+            puts(colored.cyan("Aggiungi [h]ost o [g]ruppo?"))
+            choice = readchar.readkey()
+            if choice == "h":
+                if self.editor.add_connection_to_path(list(current_path)):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+            elif choice == "g":
+                if self.editor.add_subgroup(list(current_path)):
                     self.load_config()
                     input("\nPress Enter to continue...")
 
     def _handle_edit(self, current_path: List[Any], selected_target: int):
-        """Handle 'e' key - Edit connection."""
+        """Handle 'e' key - Edit connection at any depth."""
         node = self.get_node(current_path)
         if isinstance(node, list) and 0 <= selected_target < len(node):
             connection = node[selected_target]
             if isinstance(connection, dict) and "friendly" in connection:
-                targets = self.config_data.get("targets", [])
-                aggregated = {}
-                for t in targets:
-                    if isinstance(t, dict):
-                        for k, v in t.items():
-                            aggregated[k] = v
-                target_keys = list(aggregated.keys())
-                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
-                    target_name = target_keys[current_path[0]]
-                    if self.editor.edit_connection(target_name, selected_target, connection):
-                        self.load_config()
-                        input("\nPress Enter to continue...")
+                if self.editor.edit_connection_at_path(list(current_path), selected_target, connection):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
 
     def _handle_delete(self, current_path: List[Any], selected_target: int):
-        """Handle 'd' key - Delete target or connection based on context."""
+        """Handle 'd' key - Delete target, subgroup, or connection based on context."""
         node = self.get_node(current_path)
         if isinstance(node, dict) and not current_path:
             target_keys = list(node.keys())
@@ -438,29 +455,32 @@ class ConnectionNavigator(BaseSSHMenuC):
                     self.load_config()
                     input("\nPress Enter to continue...")
         elif isinstance(node, list) and 0 <= selected_target < len(node):
-            connection = node[selected_target]
-            if isinstance(connection, dict) and "friendly" in connection:
-                targets = self.config_data.get("targets", [])
-                aggregated = {}
-                for t in targets:
-                    if isinstance(t, dict):
-                        for k, v in t.items():
-                            aggregated[k] = v
-                target_keys = list(aggregated.keys())
-                if len(current_path) >= 1 and 0 <= current_path[0] < len(target_keys):
-                    target_name = target_keys[current_path[0]]
-                    if self.editor.delete_connection(target_name, selected_target, connection):
-                        self.load_config()
-                        input("\nPress Enter to continue...")
+            item = node[selected_target]
+            if isinstance(item, dict) and ("friendly" in item or "host" in item):
+                if self.editor.delete_connection_at_path(list(current_path), selected_target, item):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+            elif isinstance(item, dict) and "friendly" not in item and "host" not in item:
+                sg_name = next(iter(item.keys()), "?")
+                if self.editor.delete_subgroup(list(current_path), selected_target, sg_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
 
     def _handle_rename(self, current_path: List[Any], selected_target: int):
-        """Handle 'r' key - Rename target."""
+        """Handle 'r' key - Rename target or subgroup."""
         node = self.get_node(current_path)
         if isinstance(node, dict) and not current_path:
             target_keys = list(node.keys())
             if 0 <= selected_target < len(target_keys):
                 target_name = target_keys[selected_target]
                 if self.editor.rename_target(target_name):
+                    self.load_config()
+                    input("\nPress Enter to continue...")
+        elif isinstance(node, list) and 0 <= selected_target < len(node):
+            item = node[selected_target]
+            if isinstance(item, dict) and "friendly" not in item and "host" not in item:
+                sg_name = next(iter(item.keys()), "?")
+                if self.editor.rename_subgroup(list(current_path), selected_target, sg_name):
                     self.load_config()
                     input("\nPress Enter to continue...")
 
@@ -798,3 +818,59 @@ class ConnectionNavigator(BaseSSHMenuC):
             puts(colored.yellow("[SYNC] SyncManager aggiornato con la nuova configurazione."))
 
         input("\nPress Enter to continue...")
+
+    def _search_mode(self) -> None:
+        """Incremental search mode triggered by '/' key.
+
+        Reads characters one by one with readchar and filters results live.
+        Navigation: UP/DOWN to move, ENTER to connect, ESC to exit.
+        """
+        query = ""
+        selected = 0
+
+        while True:
+            self.display.clear_screen()
+            results = self.config_manager.search_hosts(query)
+            total = len(results)
+
+            puts(colored.cyan(f"[/] cerca: {query}_  ({total} risultati)  ESC per uscire"))
+            if not results:
+                puts(colored.yellow("  (nessun risultato)"))
+            else:
+                for i, (breadcrumb, host) in enumerate(results):
+                    friendly = host.get("friendly", host.get("host", ""))
+                    tags = host.get("tags", [])
+                    tag_str = f"  [{' '.join(tags)}]" if tags else ""
+                    line = f"  {breadcrumb} > {friendly}{tag_str}"
+                    if i == selected:
+                        puts(colored.green(f"→ {line}"))
+                    else:
+                        puts(colored.white(f"  {line}"))
+
+            key = readchar.readkey()
+
+            if key == "\x1b" or key == "q":  # ESC or q exits search
+                return
+            elif key == readchar.key.UP:
+                if selected > 0:
+                    selected -= 1
+            elif key == readchar.key.DOWN:
+                if selected < total - 1:
+                    selected += 1
+            elif key == readchar.key.ENTER:
+                if results:
+                    _, host = results[selected]
+                    h = host.get("host", "")
+                    user = host.get("user", get_current_user())
+                    port = host.get("port", 22)
+                    identity = host.get("certkey")
+                    extra_args = host.get("extra_args")
+                    launcher = SSHLauncher(h, user, port, identity, extra_args)
+                    launcher.launch()
+                return
+            elif key in ("\x7f", "\x08"):  # Backspace
+                query = query[:-1]
+                selected = 0
+            elif key.isprintable() and len(key) == 1:
+                query += key
+                selected = 0

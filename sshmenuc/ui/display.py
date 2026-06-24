@@ -40,11 +40,12 @@ class MenuDisplay:
         Args:
             headers: List of header column names
         """
-        tbl = "+--------+------------------------------------+"
+        tbl = "+--------+------------------------------------+-------------------+"
         print(f"{self.colors.OKCYAN}{tbl}{self.colors.ENDC}")
         print(
             f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.HEADER}{'#':>7} {self.colors.ENDC}"
             f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.HEADER}{headers[0]:^35} {self.colors.ENDC}"
+            f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.HEADER}{'TAGS':^19} {self.colors.ENDC}"
             f"{self.colors.OKCYAN}|{self.colors.ENDC}"
         )
         print(f"{self.colors.OKCYAN}{tbl}{self.colors.ENDC}")
@@ -60,38 +61,52 @@ class MenuDisplay:
         """
         idx_display = ""
         title = ""
-        
+        tags_str = ""
+
         if len(infos) == 2:
             idx = infos[0]
             second = infos[1]
             idx_display = f"{idx:>7}"
             if isinstance(second, dict):
                 title = second.get("friendly", second.get("host", ""))
+                tags = second.get("tags", [])
+                tags_str = " ".join(tags)[:19] if tags else ""
             else:
                 title = str(second)
         else:
             idx_display = str(infos[0])
             title = str(infos[1])
-        
+
         marker = "[x]" if is_marked and is_host else ("[ ]" if is_host else "   ")
-        
+
         if is_selected:
             row = (
                 f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.OKGREEN}{idx_display} {self.colors.ENDC}"
                 f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.OKGREEN} {marker} {title:<31}{self.colors.ENDC}"
+                f"{self.colors.OKCYAN}|{self.colors.ENDC}{self.colors.OKCYAN}{tags_str:<19} {self.colors.ENDC}"
                 f"{self.colors.OKCYAN}|{self.colors.ENDC}"
             )
         else:
             row = (
                 f"{self.colors.OKCYAN}|{self.colors.ENDC}{idx_display} {self.colors.OKCYAN}|{self.colors.ENDC}"
                 f" {marker} {title:<31}{self.colors.OKCYAN}|{self.colors.ENDC}"
+                f"{self.colors.OKCYAN}{tags_str:<19} {self.colors.ENDC}"
+                f"{self.colors.OKCYAN}|{self.colors.ENDC}"
             )
-        
+
         print(row)
     
+    def print_breadcrumb(self, breadcrumb: str) -> None:
+        """Print current navigation path above the table.
+
+        Args:
+            breadcrumb: Path string, e.g. "HDP > Prod > Admin"
+        """
+        print(f"{self.colors.OKCYAN}  {breadcrumb}{self.colors.ENDC}")
+
     def print_footer(self) -> None:
         """Print table footer."""
-        print(f"{self.colors.OKCYAN}+--------+------------------------------------+{self.colors.ENDC}")
+        print(f"{self.colors.OKCYAN}+--------+------------------------------------+-------------------+{self.colors.ENDC}")
 
     def print_table(self, data: Union[Dict[str, Any], List[Any]], selected_target: int,
                    marked_indices: set, level: int) -> None:

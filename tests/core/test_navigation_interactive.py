@@ -376,3 +376,74 @@ class TestKeyboardInterruptHandling:
         mock_readkey.side_effect = ['s', 'q', 'y']
         navigator = ConnectionNavigator(temp_config_file)
         navigator.navigate()
+
+
+@pytest.fixture
+def tagged_config_file():
+    """Config with tagged hosts for search tests."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        config_data = {
+            "targets": [
+                {"HDP": [
+                    {"friendly": "nn-01", "host": "hdp-nn.local", "tags": ["hadoop", "namenode"]},
+                    {"friendly": "rm-01", "host": "hdp-rm.local", "tags": ["hadoop", "admin"]},
+                    {"Prod": [
+                        {"friendly": "dn-01", "host": "hdp-dn.prod", "tags": ["hadoop", "prod"]}
+                    ]}
+                ]},
+                {"Web": [
+                    {"friendly": "web-01", "host": "web.example.com"},
+                ]},
+            ]
+        }
+        json.dump(config_data, f, indent=2)
+        temp_path = f.name
+    yield temp_path
+    if os.path.exists(temp_path):
+        os.unlink(temp_path)
+
+
+class TestSearchMode:
+    """Tests for incremental search mode (issue #9)."""
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_slash_opens_search_and_esc_exits(self, mock_print_menu, mock_readkey, tagged_config_file):
+        """'/' opens search mode; ESC exits back to main loop."""
+        mock_readkey.side_effect = ['/', '\x1b', 'q', 'y']
+        navigator = ConnectionNavigator(tagged_config_file)
+        with patch.object(navigator.display, 'clear_screen'):
+            navigator.navigate()
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_search_filters_by_friendly(self, mock_print_menu, mock_readkey, tagged_config_file):
+        """Typing a friendly name substring shows matching results."""
+        navigator = ConnectionNavigator(tagged_config_file)
+        results = navigator.config_manager.search_hosts("nn-01")
+        assert len(results) == 1
+        assert results[0][1]["friendly"] == "nn-01"
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_search_filters_by_tag(self, mock_print_menu, mock_readkey, tagged_config_file):
+        """Searching a tag returns all hosts with that tag."""
+        navigator = ConnectionNavigator(tagged_config_file)
+        results = navigator.config_manager.search_hosts("hadoop")
+        assert len(results) == 3
+        friendly_names = [r[1]["friendly"] for r in results]
+        assert "nn-01" in friendly_names
+        assert "rm-01" in friendly_names
+        assert "dn-01" in friendly_names
+
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_search_enter_launches_connection(self, mock_print_menu, mock_readkey, tagged_config_file):
+        """ENTER on a search result launches the SSH connection."""
+        mock_readkey.side_effect = ['/', 'n', 'n', readchar.key.ENTER, 'q', 'y']
+        navigator = ConnectionNavigator(tagged_config_file)
+        with patch.object(navigator.display, 'clear_screen'), \
+             patch('sshmenuc.core.navigation.SSHLauncher') as mock_launcher:
+            mock_launcher.return_value.launch = MagicMock()
+            navigator.navigate()
+            mock_launcher.assert_called_once()
