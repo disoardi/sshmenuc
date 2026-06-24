@@ -150,27 +150,31 @@ class ConnectionNavigator(BaseSSHMenuC):
                 self.marked_indices.clear()
                 self.move_left(current_path)
                 selected_target = 0
-            elif key == " ":
-                self._handle_selection(current_path, selected_target)
-            elif key == readchar.key.ENTER:
-                prev_path = list(current_path)
-                self._handle_enter(current_path, selected_target)
-                if current_path != prev_path:
-                    selected_target = 0
-            elif key == "a":
-                self._handle_add(current_path, selected_target)
-            elif key == "e":
-                self._handle_edit(current_path, selected_target)
-            elif key == "d":
-                self._handle_delete(current_path, selected_target)
-            elif key == "r":
-                self._handle_rename(current_path, selected_target)
-            elif key == "s":
-                self._handle_sync_status()
-            elif key == "x":
-                self._handle_context_switch()
-            elif key == "c" and self._context_manager is not None:
-                self._handle_context_manage()
+            else:
+                try:
+                    if key == " ":
+                        self._handle_selection(current_path, selected_target)
+                    elif key == readchar.key.ENTER:
+                        prev_path = list(current_path)
+                        self._handle_enter(current_path, selected_target)
+                        if current_path != prev_path:
+                            selected_target = 0
+                    elif key == "a":
+                        self._handle_add(current_path, selected_target)
+                    elif key == "e":
+                        self._handle_edit(current_path, selected_target)
+                    elif key == "d":
+                        self._handle_delete(current_path, selected_target)
+                    elif key == "r":
+                        self._handle_rename(current_path, selected_target)
+                    elif key == "s":
+                        self._handle_sync_status()
+                    elif key == "x":
+                        self._handle_context_switch()
+                    elif key == "c" and self._context_manager is not None:
+                        self._handle_context_manage()
+                except KeyboardInterrupt:
+                    pass  # Ctrl+C cancels the current operation, returns to menu
     
     def _handle_selection(self, current_path: List[Any], selected_target: int):
         """Handle selection toggle with space key.

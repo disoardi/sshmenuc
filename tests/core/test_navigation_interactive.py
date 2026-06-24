@@ -302,3 +302,77 @@ class TestQuitConfirmation:
         all_args = ' '.join(str(c) for c in mock_puts.call_args_list)
         assert 'decrypt' not in all_args.lower()
         assert 'password' not in all_args.lower()
+
+
+class TestKeyboardInterruptHandling:
+    """Tests for graceful Ctrl+C handling in all input() calls.
+
+    Regression for crash: pressing Ctrl+C during 'Press Enter to continue...'
+    caused an unhandled KeyboardInterrupt traceback instead of returning to menu.
+    """
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._handle_add')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_ctrl_c_during_handle_add_does_not_crash(
+        self, mock_print_menu, mock_readkey, mock_handle_add, mock_input, temp_config_file
+    ):
+        """Ctrl+C during _handle_add must not propagate as uncaught KeyboardInterrupt."""
+        mock_handle_add.side_effect = KeyboardInterrupt
+        mock_readkey.side_effect = ['a', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()  # must complete without raising
+        mock_print_menu.call_count >= 2
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._handle_edit')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_ctrl_c_during_handle_edit_does_not_crash(
+        self, mock_print_menu, mock_readkey, mock_handle_edit, mock_input, temp_config_file
+    ):
+        """Ctrl+C during _handle_edit must not crash."""
+        mock_handle_edit.side_effect = KeyboardInterrupt
+        mock_readkey.side_effect = ['e', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._handle_delete')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_ctrl_c_during_handle_delete_does_not_crash(
+        self, mock_print_menu, mock_readkey, mock_handle_delete, mock_input, temp_config_file
+    ):
+        """Ctrl+C during _handle_delete must not crash."""
+        mock_handle_delete.side_effect = KeyboardInterrupt
+        mock_readkey.side_effect = ['d', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._handle_rename')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_ctrl_c_during_handle_rename_does_not_crash(
+        self, mock_print_menu, mock_readkey, mock_handle_rename, mock_input, temp_config_file
+    ):
+        """Ctrl+C during _handle_rename must not crash."""
+        mock_handle_rename.side_effect = KeyboardInterrupt
+        mock_readkey.side_effect = ['r', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('sshmenuc.core.navigation.ConnectionNavigator._handle_sync_status')
+    @patch('readchar.readkey')
+    @patch('sshmenuc.core.navigation.ConnectionNavigator.print_menu')
+    def test_ctrl_c_during_sync_status_does_not_crash(
+        self, mock_print_menu, mock_readkey, mock_sync, mock_input, temp_config_file
+    ):
+        """Ctrl+C during sync status panel must not crash."""
+        mock_sync.side_effect = KeyboardInterrupt
+        mock_readkey.side_effect = ['s', 'q', 'y']
+        navigator = ConnectionNavigator(temp_config_file)
+        navigator.navigate()
