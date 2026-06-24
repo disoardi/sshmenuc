@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - 2026-06-24
+
+### Fixed
+- **Ctrl+C durante operazioni interattive non causa crash**: premere Ctrl+C mentre si è
+  in un prompt `input()` (add, edit, delete, rename, sync) ritorna silenziosamente al menu
+  invece di terminare l'app con traceback. Chiude [#7].
+
 ## [1.3.6] - 2026-06-24
 
 ### Fixed
@@ -13,9 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Warning decrypt su `q` con sync attivo**: se la configurazione è gestita in modalità
   cifrata (sync remoto configurato), il prompt avvisa che il prossimo avvio richiederà
   la password di decrypt.
-- **Ctrl+C durante operazioni interattive non causa crash**: premere Ctrl+C mentre si è
-  in un prompt `input()` (add, edit, delete, rename, sync) ritorna silenziosamente al menu
-  invece di terminare l'app con traceback. Chiude [#7].
 
 ## [1.3.5] - 2026-05-27
 
