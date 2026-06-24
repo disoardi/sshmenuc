@@ -19,6 +19,7 @@ from typing import Optional
 
 from .crypto import decrypt_config, encrypt_config
 from .git_remote import (
+    PullResult,
     PullStatus,
     ensure_repo_initialized,
     is_remote_reachable,
@@ -92,6 +93,14 @@ class SyncManager:
 
         if pull_result.status == PullStatus.OFFLINE:
             return self._handle_offline()
+
+        if pull_result.status == PullStatus.CONFLICT:
+            # Git history diverged (non-fast-forward): treat like OK with remote bytes
+            # and fall through to the content-level conflict resolution below.
+            remote_enc = pull_result.remote_enc_bytes
+            if not remote_enc:
+                return self._handle_offline()
+            pull_result = PullResult(status=PullStatus.OK, remote_enc_bytes=remote_enc)
 
         if pull_result.status == PullStatus.NO_CHANGE:
             # Nothing changed remotely. Decrypt the local encrypted backup to both

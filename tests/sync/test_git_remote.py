@@ -165,3 +165,73 @@ class TestPushRemote:
     def test_returns_false_on_write_error(self, mock_open):
         result = push_remote(SYNC_CFG, ENC_BYTES)
         assert result is False
+
+    @patch("sshmenuc.sync.git_remote._run_git")
+    @patch("builtins.open", new=mock_open())
+    def test_retries_after_rebase_on_nonfastforward(self, mock_git):
+        mock_git.side_effect = [
+            _make_run_result(returncode=0),                                        # add
+            _make_run_result(returncode=0, stdout="M config\n"),                   # status
+            _make_run_result(returncode=0),                                        # commit
+            _make_run_result(returncode=1, stderr="Updates were rejected"),        # push → rejected
+            _make_run_result(returncode=0),                                        # pull --rebase
+            _make_run_result(returncode=0),                                        # retry push
+        ]
+        result = push_remote(SYNC_CFG, ENC_BYTES)
+        assert result is True
+        # Verify pull --rebase was called
+        rebase_call = mock_git.call_args_list[4]
+        assert "pull" in rebase_call[0][0] and "--rebase" in rebase_call[0][0]
+
+    @patch("sshmenuc.sync.git_remote._run_git")
+    @patch("builtins.open", new=mock_open())
+    def test_returns_false_if_rebase_also_fails(self, mock_git):
+        mock_git.side_effect = [
+            _make_run_result(returncode=0),
+            _make_run_result(returncode=0, stdout="M config\n"),
+            _make_run_result(returncode=0),
+            _make_run_result(returncode=1, stderr="Updates were rejected"),  # push rejected
+            _make_run_result(returncode=1, stderr="conflict during rebase"),  # rebase fails
+        ]
+        result = push_remote(SYNC_CFG, ENC_BYTES)
+        assert result is False
+
+
+class TestDivergenceDetection:
+    """Tests for _is_diverged and _is_push_rejected helpers."""
+
+    def test_pull_returns_conflict_on_diverged_history(self):
+        from sshmenuc.sync.git_remote import _is_diverged
+        assert _is_diverged("fatal: Not a fast-forward update") is True
+        assert _is_diverged("Updates were rejected because the tip is behind") is True
+        assert _is_diverged("fatal: Could not read from remote repository") is False
+        assert _is_diverged("ssh: connect to host example.com port 22: timed out") is False
+
+    def test_pull_returns_offline_on_network_error(self):
+        from sshmenuc.sync.git_remote import _is_diverged
+        assert _is_diverged("fatal: unable to access 'https://example.com/': timed out") is False
+        assert _is_diverged("Could not resolve hostname") is False
+
+    @patch("sshmenuc.sync.git_remote._read_remote_enc", return_value=ENC_BYTES)
+    @patch("sshmenuc.sync.git_remote._run_git")
+    def test_pull_remote_returns_conflict_on_diverged_merge(self, mock_git, mock_read):
+        mock_git.side_effect = [
+            _make_run_result(returncode=0),                                    # fetch
+            _make_run_result(returncode=0),                                    # ls-remote
+            _make_run_result(returncode=0, stdout="config.json.enc\n"),        # diff
+            _make_run_result(returncode=1, stderr="Not a fast-forward"),       # merge fails
+        ]
+        result = pull_remote(SYNC_CFG)
+        assert result.status == PullStatus.CONFLICT
+        assert result.remote_enc_bytes == ENC_BYTES
+
+    @patch("sshmenuc.sync.git_remote._run_git")
+    def test_pull_remote_returns_offline_on_network_merge_error(self, mock_git):
+        mock_git.side_effect = [
+            _make_run_result(returncode=0),
+            _make_run_result(returncode=0),
+            _make_run_result(returncode=0, stdout="config.json.enc\n"),
+            _make_run_result(returncode=1, stderr="fatal: unable to access: timed out"),
+        ]
+        result = pull_remote(SYNC_CFG)
+        assert result.status == PullStatus.OFFLINE

@@ -26,6 +26,18 @@ class PullResult:
     remote_enc_bytes: Optional[bytes] = field(default=None)
 
 
+def _is_diverged(stderr: str) -> bool:
+    """Return True if git stderr indicates history divergence (not a network error)."""
+    patterns = ("Not a fast-forward", "Updates were rejected", "not fully merged", "diverged")
+    return any(p in stderr for p in patterns)
+
+
+def _is_push_rejected(stderr: str) -> bool:
+    """Return True if git push stderr indicates non-fast-forward rejection."""
+    patterns = ("Updates were rejected", "failed to push some refs", "not fully merged")
+    return any(p in stderr for p in patterns)
+
+
 def _run_git(args: list, cwd: str, timeout: int = 30) -> subprocess.CompletedProcess:
     """Run a git command in the given directory."""
     cmd = ["git"] + args
@@ -145,7 +157,12 @@ def pull_remote(sync_cfg: dict) -> PullResult:
         # Merge remote into local
         merge = _run_git(["merge", f"origin/{branch}", "--ff-only"], cwd=repo_path)
         if merge.returncode != 0:
-            logging.warning(f"git merge failed: {merge.stderr.strip()}")
+            stderr = merge.stderr.strip()
+            logging.warning(f"git merge failed: {stderr}")
+            if _is_diverged(stderr):
+                # History diverged: return remote bytes so caller can resolve conflict
+                remote_enc_bytes = _read_remote_enc(repo_path, branch, remote_file)
+                return PullResult(status=PullStatus.CONFLICT, remote_enc_bytes=remote_enc_bytes)
             return PullResult(status=PullStatus.OFFLINE)
 
         remote_enc_bytes = _read_remote_enc(repo_path, branch, remote_file)
@@ -205,7 +222,20 @@ def push_remote(sync_cfg: dict, enc_bytes: bytes) -> bool:
             timeout=30,
         )
         if result.returncode != 0:
-            logging.warning(f"git push failed: {result.stderr.strip()}")
+            stderr = result.stderr.strip()
+            if _is_push_rejected(stderr):
+                # Remote has new commits: pull --rebase then retry once
+                rebase = _run_git(["pull", "--rebase", "origin", branch], cwd=repo_path, timeout=30)
+                if rebase.returncode == 0:
+                    retry = _run_git(
+                        ["push", "origin", branch, "--set-upstream"],
+                        cwd=repo_path,
+                        timeout=30,
+                    )
+                    if retry.returncode == 0:
+                        return True
+                    stderr = retry.stderr.strip()
+            logging.warning(f"git push failed: {stderr}")
             return False
 
         return True
