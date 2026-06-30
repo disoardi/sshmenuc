@@ -139,7 +139,7 @@ class ConfigEditor:
         user = self.prompt_input("Username (optional, leave empty for current user)", "")
         certkey = self.prompt_input("SSH key path (optional)", "")
         connection_type = self.prompt_input("Connection type", "ssh")
-
+        extra_args = self.prompt_input("SSH extra args (optional, e.g. -t bash)", "")
         tags_raw = self.prompt_input("Tags (comma-separated, optional)", "")
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
 
@@ -153,6 +153,8 @@ class ConfigEditor:
             connection["user"] = user
         if certkey:
             connection["certkey"] = certkey
+        if extra_args:
+            connection["extra_args"] = extra_args
         if tags:
             connection["tags"] = tags
 
@@ -184,6 +186,7 @@ class ConfigEditor:
         host = self.prompt_input("Host", connection.get("host", ""))
         user = self.prompt_input("Username", connection.get("user", ""))
         certkey = self.prompt_input("SSH key path", connection.get("certkey", ""))
+        extra_args = self.prompt_input("SSH extra args (e.g. -t bash)", connection.get("extra_args", ""))
         tags_raw = self.prompt_input("Tags (comma-separated)", ",".join(connection.get("tags", [])))
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
 
@@ -195,10 +198,14 @@ class ConfigEditor:
             target_name, connection_index,
             friendly=friendly, host=host, user=user or None, certkey=certkey or None
         )
-        # Update tags separately (modify_connection doesn't know about tags)
+        # Update extra_args and tags separately (modify_connection doesn't know about them)
         target = self.manager._find_target(target_name)
         if target:
             conn = target[target_name][connection_index]
+            if extra_args:
+                conn["extra_args"] = extra_args
+            elif "extra_args" in conn:
+                del conn["extra_args"]
             if tags:
                 conn["tags"] = tags
             elif "tags" in conn:
@@ -272,6 +279,7 @@ class ConfigEditor:
         user = self.prompt_input("Username (optional, leave empty for current user)", "")
         certkey = self.prompt_input("SSH key path (optional)", "")
         connection_type = self.prompt_input("Connection type", "ssh")
+        extra_args = self.prompt_input("SSH extra args (optional, e.g. -t bash)", "")
         tags_raw = self.prompt_input("Tags (comma-separated, optional)", "")
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
 
@@ -284,6 +292,8 @@ class ConfigEditor:
             connection["user"] = user
         if certkey:
             connection["certkey"] = certkey
+        if extra_args:
+            connection["extra_args"] = extra_args
         if tags:
             connection["tags"] = tags
 
@@ -310,6 +320,7 @@ class ConfigEditor:
         host = self.prompt_input("Host", connection.get("host", ""))
         user = self.prompt_input("Username", connection.get("user", ""))
         certkey = self.prompt_input("SSH key path", connection.get("certkey", ""))
+        extra_args = self.prompt_input("SSH extra args (e.g. -t bash)", connection.get("extra_args", ""))
         tags_raw = self.prompt_input(
             "Tags (comma-separated)", ",".join(connection.get("tags", []))
         )
@@ -333,6 +344,10 @@ class ConfigEditor:
                 node[index]["certkey"] = certkey
             elif "certkey" in node[index]:
                 del node[index]["certkey"]
+            if extra_args:
+                node[index]["extra_args"] = extra_args
+            elif "extra_args" in node[index]:
+                del node[index]["extra_args"]
             if tags:
                 node[index]["tags"] = tags
             elif "tags" in node[index]:
