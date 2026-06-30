@@ -42,6 +42,19 @@ class ContextManager:
         """Return context names sorted alphabetically."""
         return sorted(self._load().get("contexts", {}).keys())
 
+    def discover_available(self, sync_repo_path: str) -> List[str]:
+        """Return .enc filenames in sync_repo_path not linked to any registered context."""
+        import glob
+        registered = {
+            ctx.get("remote_file", "")
+            for ctx in self._load().get("contexts", {}).values()
+        }
+        enc_files = sorted(
+            os.path.basename(p)
+            for p in glob.glob(os.path.join(sync_repo_path, "*.enc"))
+        )
+        return [f for f in enc_files if f not in registered]
+
     def get_active(self) -> str:
         """Return the name of the active context.
 

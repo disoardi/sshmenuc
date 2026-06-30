@@ -621,11 +621,23 @@ class ConnectionNavigator(BaseSSHMenuC):
         """Handle 'c' key - Add a new context or manage an existing one."""
         names = self._context_manager.list_contexts()
 
+        # Discover unregistered .enc files from the active context's sync repo
+        active_sync_cfg = self._context_manager.get_sync_cfg(self._active_context or "")
+        sync_repo_path = active_sync_cfg.get("sync_repo_path", "")
+        discovered = self._context_manager.discover_available(sync_repo_path) if sync_repo_path else []
+
         puts(colored.cyan("\n=== Gestione Contesti ==="))
         puts(colored.white("  [1] Nuovo contesto"))
         for i, name in enumerate(names, 2):
             marker = " *" if name == self._active_context else ""
             puts(colored.white(f"  [{i}] {name}{marker}"))
+
+        offset = len(names) + 2
+        if discovered:
+            puts(colored.cyan("\n  -- Disponibili nel repo (non ancora registrati) --"))
+            for j, enc_file in enumerate(discovered, offset):
+                puts(colored.yellow(f"  [{j}] {enc_file}  (importa)"))
+
         puts(colored.white("\n[Invio] Annulla"))
 
         raw = input("> ").strip()
@@ -637,12 +649,20 @@ class ConnectionNavigator(BaseSSHMenuC):
             return
 
         try:
-            idx = int(raw) - 2
+            idx_raw = int(raw)
         except ValueError:
             return
 
-        if 0 <= idx < len(names):
-            self._handle_context_actions(names[idx])
+        # Existing registered context
+        existing_idx = idx_raw - 2
+        if 0 <= existing_idx < len(names):
+            self._handle_context_actions(names[existing_idx])
+            return
+
+        # Discovered (unregistered) enc file
+        discovered_idx = idx_raw - offset
+        if discovered and 0 <= discovered_idx < len(discovered):
+            self._handle_import_discovered_context(discovered[discovered_idx], active_sync_cfg)
 
     def _handle_context_actions(self, name: str) -> None:
         """Sub-menu for a selected context: edit sync params or reimport from plaintext."""
@@ -767,6 +787,48 @@ class ConnectionNavigator(BaseSSHMenuC):
         if switch == "s":
             self._switch_to_context(name)
         input("\nPress Enter to continue...")
+
+    def _handle_import_discovered_context(self, enc_file: str, base_sync_cfg: dict) -> None:
+        """Register a discovered .enc file from the sync repo as a new context.
+
+        Reuses remote_url, branch, and sync_repo_path from the active context,
+        only the remote_file changes. Offers to switch immediately after import.
+        """
+        suggested_name = enc_file.removesuffix(".enc")
+        puts(colored.cyan(f"\n--- Importa contesto: {enc_file} ---"))
+        puts(colored.white(f"  remote_url:   {base_sync_cfg.get('remote_url', '')}"))
+        puts(colored.white(f"  branch:       {base_sync_cfg.get('branch', 'main')}"))
+        puts(colored.white(f"  remote_file:  {enc_file}"))
+        puts(colored.white(f"  sync_repo:    {base_sync_cfg.get('sync_repo_path', '')}"))
+
+        name_input = input(f"\nNome contesto [{suggested_name}]: ").strip()
+        name = name_input or suggested_name
+
+        if not name:
+            return
+
+        if name in self._context_manager.list_contexts():
+            puts(colored.red(f"[CTX] Contesto '{name}' già esistente"))
+            input("\nPress Enter to continue...")
+            return
+
+        cfg = {
+            "remote_url": base_sync_cfg.get("remote_url", ""),
+            "branch": base_sync_cfg.get("branch", "main"),
+            "remote_file": enc_file,
+            "sync_repo_path": base_sync_cfg.get("sync_repo_path", ""),
+            "auto_pull": True,
+            "auto_push": True,
+        }
+        self._context_manager.add_context(name, cfg)
+        self._context_manager.ensure_context_dir(name)
+        puts(colored.green(f"[CTX] Contesto '{name}' registrato (remote_file: {enc_file})"))
+
+        switch = input(f"Passare subito a '{name}'? [s/N]: ").strip().lower()
+        if switch == "s":
+            self._switch_to_context(name)
+        else:
+            input("\nPress Enter to continue...")
 
     def _handle_edit_context_sync(self, name: str) -> None:
         """Edit the sync configuration (remote_url, branch, remote_file) of a context.

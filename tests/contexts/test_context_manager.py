@@ -179,6 +179,36 @@ class TestAddRemoveContext:
         ctx.remove_context("nonexistent")  # Should not raise
 
 
+class TestDiscoverAvailable:
+    # ctx fixture has home.enc, isp.enc, config.enc already registered
+
+    def test_returns_enc_files_not_registered(self, ctx, tmp_path):
+        (tmp_path / "home.enc").write_bytes(b"")
+        (tmp_path / "isp.enc").write_bytes(b"")
+        (tmp_path / "new.enc").write_bytes(b"")
+        result = ctx.discover_available(str(tmp_path))
+        assert "new.enc" in result
+        assert "home.enc" not in result
+        assert "isp.enc" not in result
+
+    def test_returns_empty_when_all_registered(self, ctx, tmp_path):
+        for f in ("home.enc", "isp.enc", "config.enc"):
+            (tmp_path / f).write_bytes(b"")
+        result = ctx.discover_available(str(tmp_path))
+        assert result == []
+
+    def test_returns_empty_for_missing_repo(self, ctx):
+        result = ctx.discover_available("/nonexistent/path")
+        assert result == []
+
+    def test_ignores_non_enc_files(self, ctx, tmp_path):
+        (tmp_path / "new.enc").write_bytes(b"")
+        (tmp_path / "config.json").write_bytes(b"")
+        (tmp_path / "README.md").write_bytes(b"")
+        result = ctx.discover_available(str(tmp_path))
+        assert result == ["new.enc"]
+
+
 class TestEnsureContextDir:
     def test_creates_directory(self, empty_ctx, tmp_path):
         # Override CONTEXTS_BASE_DIR is not possible without monkeypatching,

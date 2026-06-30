@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-06-30
+
+### Added
+- **Scoperta automatica contesti dal repo** (#10): la schermata `[c]manage` mostra ora i file
+  `.enc` presenti nel sync repo locale che non sono ancora registrati in `contexts.json`.
+  Selezionando un file scoperito, il contesto viene registrato automaticamente (stessa
+  `remote_url`, `branch` e `sync_repo_path` del contesto attivo) senza dover rilanciare
+  il wizard manuale.
+
 ## [1.4.0] - 2026-06-24
 
 ### Added
